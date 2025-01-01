@@ -1,0 +1,26 @@
+# base.yml
+
+# Parámetros del entrenamiento
+EPOCHS: 1000
+BATCH_SIZE: 32
+LEARNING_RATE_GENERATOR: 0.0002
+LEARNING_RATE_DISCRIMINATOR: 0.0002
+LATENT_DIM: 32
+SAVE_FINAL_MODEL_ONLY: True
+
+# Parámetros de Early Stopping
+EARLY_STOPPING_PATIENCE: 10  # Número de épocas sin mejora antes de detener el entrenamiento
+EARLY_STOPPING_DELTA: 0.001  # Cambio mínimo en la pérdida para considerarlo una mejora
+
+# Rutas de almacenamiento
+DATA_PATH: "./data/raw/kitpvc/"
+DATASET: "kitpvc"
+MODEL_PATH: "./models"
+PLOT_PATH: "./plots"
+LOG_PATH: "./logs"
+EXPERIMENT_PATH: "./experiments"
+EARLY_STOPPING:
+  PATIENCE: 50
+  MIN_DELTA: 0.001
+  ROLLING_WINDOW: 5
+  DIVERGENCE_THRESHOLD: 1.5
