@@ -4,21 +4,22 @@ from datetime import datetime
 
 def setup_logging(experiment_path):
     """
-    Configura el sistema de logs para el experimento.
+    Configures the logging system for the experiment.
 
     Args:
-        experiment_path (str): Ruta completa de la carpeta del experimento.
+        experiment_path (str): Full path to the experiment folder.
 
     Returns:
-        logging.Logger: Logger configurado.
+        logging.Logger: Configured logger.
     """
-    # Crear carpeta de logs dentro de la ruta del experimento
+    # Create logs directory within the experiment path
     log_dir = os.path.join(experiment_path, "logs")
     os.makedirs(log_dir, exist_ok=True)
     
-    # Configurar archivo de log
+    # Configure log file
     log_file = os.path.join(log_dir, f"{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.log")
     
+    # Set up logging configuration
     logging.basicConfig(
         level=logging.INFO,
         format='%(asctime)s - %(levelname)s - %(message)s',
@@ -28,6 +29,4 @@ def setup_logging(experiment_path):
         ]
     )
     
-    logger = logging.getLogger(os.path.basename(experiment_path))
-    logger.info(f"📝 Logs guardados en: {log_file}")
-    return logger
+    return logging.getLogger()

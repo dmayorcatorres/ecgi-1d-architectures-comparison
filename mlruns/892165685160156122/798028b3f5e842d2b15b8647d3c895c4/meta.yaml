@@ -1,0 +1,15 @@
+artifact_uri: file:///workspace/test/mlruns/892165685160156122/798028b3f5e842d2b15b8647d3c895c4/artifacts
+end_time: 1735774279699
+entry_point_name: ''
+experiment_id: '892165685160156122'
+lifecycle_stage: active
+run_id: 798028b3f5e842d2b15b8647d3c895c4
+run_name: debonair-cub-276
+run_uuid: 798028b3f5e842d2b15b8647d3c895c4
+source_name: ''
+source_type: 4
+source_version: ''
+start_time: 1735774267126
+status: 3
+tags: []
+user_id: root

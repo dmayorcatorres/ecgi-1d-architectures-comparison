@@ -1,0 +1,15 @@
+artifact_uri: file:///workspace/test/mlruns/892165685160156122/d41af416e92146008b4ab0612572d086/artifacts
+end_time: 1735766101206
+entry_point_name: ''
+experiment_id: '892165685160156122'
+lifecycle_stage: active
+run_id: d41af416e92146008b4ab0612572d086
+run_name: secretive-shrike-514
+run_uuid: d41af416e92146008b4ab0612572d086
+source_name: ''
+source_type: 4
+source_version: ''
+start_time: 1735766084231
+status: 3
+tags: []
+user_id: root

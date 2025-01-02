@@ -1,0 +1,15 @@
+artifact_uri: file:///workspace/test/mlruns/892165685160156122/1d2edad18e7d4a65bd7669729955e5aa/artifacts
+end_time: 1735773473054
+entry_point_name: ''
+experiment_id: '892165685160156122'
+lifecycle_stage: active
+run_id: 1d2edad18e7d4a65bd7669729955e5aa
+run_name: resilient-carp-289
+run_uuid: 1d2edad18e7d4a65bd7669729955e5aa
+source_name: ''
+source_type: 4
+source_version: ''
+start_time: 1735773460463
+status: 3
+tags: []
+user_id: root

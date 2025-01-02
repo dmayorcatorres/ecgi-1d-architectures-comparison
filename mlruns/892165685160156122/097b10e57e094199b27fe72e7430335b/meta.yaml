@@ -1,0 +1,15 @@
+artifact_uri: file:///workspace/test/mlruns/892165685160156122/097b10e57e094199b27fe72e7430335b/artifacts
+end_time: 1735775041211
+entry_point_name: ''
+experiment_id: '892165685160156122'
+lifecycle_stage: active
+run_id: 097b10e57e094199b27fe72e7430335b
+run_name: persistent-shoat-358
+run_uuid: 097b10e57e094199b27fe72e7430335b
+source_name: ''
+source_type: 4
+source_version: ''
+start_time: 1735775041178
+status: 4
+tags: []
+user_id: root

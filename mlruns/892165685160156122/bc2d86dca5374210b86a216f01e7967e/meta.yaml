@@ -1,0 +1,15 @@
+artifact_uri: file:///workspace/test/mlruns/892165685160156122/bc2d86dca5374210b86a216f01e7967e/artifacts
+end_time: 1735775514982
+entry_point_name: ''
+experiment_id: '892165685160156122'
+lifecycle_stage: active
+run_id: bc2d86dca5374210b86a216f01e7967e
+run_name: clean-fly-404
+run_uuid: bc2d86dca5374210b86a216f01e7967e
+source_name: ''
+source_type: 4
+source_version: ''
+start_time: 1735775514225
+status: 4
+tags: []
+user_id: root

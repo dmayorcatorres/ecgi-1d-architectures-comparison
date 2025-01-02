@@ -1,0 +1,14 @@
+aliases: []
+creation_timestamp: 1735766098329
+current_stage: None
+description: null
+last_updated_timestamp: 1735766098329
+name: GAN_Generator
+run_id: d41af416e92146008b4ab0612572d086
+run_link: null
+source: file:///workspace/test/mlruns/892165685160156122/d41af416e92146008b4ab0612572d086/artifacts/generator
+status: READY
+status_message: null
+storage_location: file:///workspace/test/mlruns/892165685160156122/d41af416e92146008b4ab0612572d086/artifacts/generator
+user_id: null
+version: 3

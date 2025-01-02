@@ -1,0 +1,15 @@
+artifact_uri: file:///workspace/test/mlruns/892165685160156122/e29bf4057ce54dd99b7341bcaa5a6fef/artifacts
+end_time: 1735773718686
+entry_point_name: ''
+experiment_id: '892165685160156122'
+lifecycle_stage: active
+run_id: e29bf4057ce54dd99b7341bcaa5a6fef
+run_name: enchanting-crane-730
+run_uuid: e29bf4057ce54dd99b7341bcaa5a6fef
+source_name: ''
+source_type: 4
+source_version: ''
+start_time: 1735773706126
+status: 3
+tags: []
+user_id: root

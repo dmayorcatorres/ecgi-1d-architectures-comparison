@@ -1,0 +1,15 @@
+artifact_uri: file:///workspace/test/mlruns/892165685160156122/1cca5907bcb5497f801996974113f73a/artifacts
+end_time: 1735765161126
+entry_point_name: ''
+experiment_id: '892165685160156122'
+lifecycle_stage: active
+run_id: 1cca5907bcb5497f801996974113f73a
+run_name: awesome-foal-825
+run_uuid: 1cca5907bcb5497f801996974113f73a
+source_name: ''
+source_type: 4
+source_version: ''
+start_time: 1735765148382
+status: 3
+tags: []
+user_id: root

@@ -1,0 +1,15 @@
+artifact_uri: file:///workspace/test/mlruns/892165685160156122/e5edde5984a04223850c32835cab8ee4/artifacts
+end_time: 1735775666875
+entry_point_name: ''
+experiment_id: '892165685160156122'
+lifecycle_stage: active
+run_id: e5edde5984a04223850c32835cab8ee4
+run_name: masked-tern-776
+run_uuid: e5edde5984a04223850c32835cab8ee4
+source_name: ''
+source_type: 4
+source_version: ''
+start_time: 1735775666051
+status: 4
+tags: []
+user_id: root

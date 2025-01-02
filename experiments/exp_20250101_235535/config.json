@@ -1,0 +1,23 @@
+{
+    "EPOCHS": 1000,
+    "BATCH_SIZE": 32,
+    "LR": 0.0002,
+    "BETA1": 0.5,
+    "BETA2": 0.999,
+    "LATENT_DIM": 32,
+    "SAVE_FINAL_MODEL_ONLY": true,
+    "EARLY_STOPPING_PATIENCE": 30,
+    "EARLY_STOPPING_DELTA": 0.001,
+    "DATA_PATH": "./data/raw/kitpvc/",
+    "DATASET": "kitpvc",
+    "MODEL_PATH": "./experiments/exp_20250101_235535/models",
+    "PLOT_PATH": "./experiments/exp_20250101_235535/plots",
+    "LOG_PATH": "./experiments/exp_20250101_235535/logs",
+    "EXPERIMENT_PATH": "./experiments",
+    "EARLY_STOPPING": {
+        "PATIENCE": 50,
+        "MIN_DELTA": 0.001,
+        "ROLLING_WINDOW": 5,
+        "DIVERGENCE_THRESHOLD": 1.5
+    }
+}

@@ -1,0 +1,15 @@
+artifact_uri: file:///workspace/test/mlruns/892165685160156122/456898ad37974effb8e54d90f324a49c/artifacts
+end_time: 1735774096210
+entry_point_name: ''
+experiment_id: '892165685160156122'
+lifecycle_stage: active
+run_id: 456898ad37974effb8e54d90f324a49c
+run_name: casual-conch-116
+run_uuid: 456898ad37974effb8e54d90f324a49c
+source_name: ''
+source_type: 4
+source_version: ''
+start_time: 1735774083613
+status: 3
+tags: []
+user_id: root

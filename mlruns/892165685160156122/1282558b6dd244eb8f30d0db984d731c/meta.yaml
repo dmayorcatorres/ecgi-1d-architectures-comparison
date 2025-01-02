@@ -1,0 +1,15 @@
+artifact_uri: file:///workspace/test/mlruns/892165685160156122/1282558b6dd244eb8f30d0db984d731c/artifacts
+end_time: 1735773886837
+entry_point_name: ''
+experiment_id: '892165685160156122'
+lifecycle_stage: active
+run_id: 1282558b6dd244eb8f30d0db984d731c
+run_name: treasured-koi-839
+run_uuid: 1282558b6dd244eb8f30d0db984d731c
+source_name: ''
+source_type: 4
+source_version: ''
+start_time: 1735773880566
+status: 4
+tags: []
+user_id: root
