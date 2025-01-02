@@ -3,15 +3,16 @@ import json
 from datetime import datetime
 
 class ExperimentTracker:
-    def __init__(self, experiment_name=None):
+    def __init__(self, experiment_name="final_experiment"):
         """
-        Initializes the experiment tracker with a unique name.
+        Inicializa el rastreador de experimentos con un nombre único.
 
         Args:
-            experiment_name (str): Name of the experiment. If not provided, it is generated automatically.
+            experiment_name (str, opcional): Nombre del experimento. Si no se proporciona, se usa uno predeterminado.
         """
-        self.experiment_name = experiment_name or f"exp_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
-        self.base_path = os.path.join("./experiments", self.experiment_name)
+        # Usamos un nombre fijo para la carpeta, para que no se cree una nueva carpeta cada vez.
+        self.experiment_name = experiment_name
+        self.base_path = os.path.join("./experiments", self.experiment_name)  # Carpeta común para todos los experimentos
         self.models_path = os.path.join(self.base_path, "models")
         self.logs_path = os.path.join(self.base_path, "logs")
         self.plots_path = os.path.join(self.base_path, "plots")
@@ -23,52 +24,67 @@ class ExperimentTracker:
         self._initialize_file(self.config_file)
 
     def _create_directories(self):
-        """Creates the necessary directories for the experiment."""
+        """Crea los directorios necesarios para el experimento."""
         os.makedirs(self.models_path, exist_ok=True)
         os.makedirs(self.logs_path, exist_ok=True)
         os.makedirs(self.plots_path, exist_ok=True)
 
     def _initialize_file(self, file_path):
-        """Initializes a file with an empty dictionary if it does not exist."""
+        """Inicializa un archivo vacío si no existe."""
         if not os.path.exists(file_path):
             with open(file_path, 'w') as f:
                 json.dump({}, f)
 
     def get_model_path(self):
+        """Devuelve la ruta donde se guardan los modelos."""
         return self.models_path
 
     def get_log_path(self):
+        """Devuelve la ruta donde se guardan los registros."""
         return self.logs_path
 
     def get_plot_path(self):
+        """Devuelve la ruta donde se guardan los gráficos."""
         return self.plots_path
 
     def get_experiment_path(self):
+        """Devuelve la ruta base del experimento."""
         return self.base_path
 
     def log_experiment_info(self, logger):
-        """
-        Logs general experiment information.
-
-        Args:
-            logger (logging.Logger): Logger instance.
-        """
-        logger.info(f"📂 Experiment registered at: {self.base_path}")
-        logger.info(f"📁 Models: {self.models_path}")
+        """Registra la información del experimento en los logs."""
+        logger.info(f"📂 Experimento registrado en: {self.base_path}")
+        logger.info(f"📁 Modelos: {self.models_path}")
         logger.info(f"📄 Logs: {self.logs_path}")
-        logger.info(f"📊 Plots: {self.plots_path}")
-        logger.info(f"📝 Metrics: {self.metrics_file}")
-        logger.info(f"⚙️ Configuration: {self.config_file}")
+        logger.info(f"📊 Gráficas: {self.plots_path}")
+        logger.info(f"📝 Métricas: {self.metrics_file}")
+        logger.info(f"⚙️ Configuración: {self.config_file}")
+
+    def log_config(self, config_dict):
+        """Guarda la configuración del experimento en `config.json`."""
+        try:
+            with open(self.config_file, 'w') as f:
+                json.dump(config_dict, f, indent=4)
+            print("⚙️ Configuración registrada correctamente en config.json.")
+        except Exception as e:
+            print(f"❌ Error al guardar la configuración: {e}")
+
+    def add_experiment_note(self, note):
+        """Agrega una nota al archivo `metrics.json`."""
+        try:
+            with open(self.metrics_file, 'r+') as f:
+                metrics = json.load(f)
+                if "notes" not in metrics:
+                    metrics["notes"] = []
+                metrics["notes"].append(note)
+                f.seek(0)
+                json.dump(metrics, f, indent=4)
+            print("📝 Nota agregada correctamente al experimento.")
+        except Exception as e:
+            print(f"❌ Error al agregar la nota: {e}")
 
     def log_metric(self, metric_name, metric_value, step=None):
-        """
-        Logs a metric in the `metrics.json` file.
-
-        Args:
-            metric_name (str): Name of the metric.
-            metric_value (float): Value of the metric.
-            step (int, optional): Step (epoch) associated with the metric.
-        """
+        """Registra una métrica en el archivo `metrics.json`."""
         try:
             with open(self.metrics_file, 'r+') as f:
                 metrics = json.load(f)
@@ -80,40 +96,27 @@ class ExperimentTracker:
                     metrics[metric_name] = metric_value
                 f.seek(0)
                 json.dump(metrics, f, indent=4)
-
-            print(f"📊 Metric logged: {metric_name} = {metric_value} (Step: {step})")
+            print(f"📊 Métrica registrada: {metric_name} = {metric_value} (Step: {step})")
         except Exception as e:
-            print(f"❌ Error logging metric {metric_name}: {e}")
+            print(f"❌ Error al registrar métrica {metric_name}: {e}")
 
-    def log_config(self, config_dict):
-        """
-        Saves the experiment configuration in `config.json`.
-
-        Args:
-            config_dict (dict): Experiment configuration.
-        """
+    def get_metrics(self):
+        """Devuelve todas las métricas registradas en `metrics.json`."""
         try:
-            with open(self.config_file, 'w') as f:
-                json.dump(config_dict, f, indent=4)
-            print("⚙️ Configuration successfully logged in config.json.")
+            with open(self.metrics_file, 'r') as f:
+                return json.load(f)
         except Exception as e:
-            print(f"❌ Error saving configuration: {e}")
+            print(f"❌ Error al leer métricas: {e}")
+            return {}
 
-    def add_experiment_note(self, note):
-        """
-        Adds a note to the `metrics.json` file.
-
-        Args:
-            note (str): Note about the experiment.
-        """
+    def log_summary(self, summary_dict):
+        """Agrega un resumen general del experimento."""
         try:
             with open(self.metrics_file, 'r+') as f:
                 metrics = json.load(f)
-                if "notes" not in metrics:
-                    metrics["notes"] = []
-                metrics["notes"].append(note)
+                metrics['summary'] = summary_dict
                 f.seek(0)
                 json.dump(metrics, f, indent=4)
-            print("📝 Note added to the experiment.")
+            print("📊 Resumen del experimento registrado correctamente.")
         except Exception as e:
-            print(f"❌ Error adding note: {e}")
+            print(f"❌ Error al registrar el resumen: {e}")

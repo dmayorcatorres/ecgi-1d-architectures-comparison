@@ -1,0 +1,15 @@
+artifact_uri: file:///workspace/test/mlruns/892165685160156122/3622df3ca3b84de5b91ba2ffa901fd0b/artifacts
+end_time: 1735785319890
+entry_point_name: ''
+experiment_id: '892165685160156122'
+lifecycle_stage: active
+run_id: 3622df3ca3b84de5b91ba2ffa901fd0b
+run_name: abundant-boar-895
+run_uuid: 3622df3ca3b84de5b91ba2ffa901fd0b
+source_name: ''
+source_type: 4
+source_version: ''
+start_time: 1735785301394
+status: 3
+tags: []
+user_id: root

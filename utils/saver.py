@@ -2,47 +2,19 @@ import os
 import torch
 import matplotlib.pyplot as plt
 
-def save_model(generator, discriminator, config):
-    """
-    Guarda los modelos finales del Generador y Discriminador.
-
-    Args:
-        generator (torch.nn.Module): Modelo del Generador.
-        discriminator (torch.nn.Module): Modelo del Discriminador.
-        config (dict): Configuración actual.
-    """
-    generator_path = os.path.join(config['MODEL_PATH'], "generator_final.pt")
-    discriminator_path = os.path.join(config['MODEL_PATH'], "discriminator_final.pt")
-    
-    os.makedirs(config['MODEL_PATH'], exist_ok=True)
-    
-    torch.save(generator.state_dict(), generator_path)
-    torch.save(discriminator.state_dict(), discriminator_path)
-    
-    print(f"✅ Modelo final del Generador guardado en: {generator_path}")
-    print(f"✅ Modelo final del Discriminador guardado en: {discriminator_path}")
-
-
-def save_loss_plot(loss_d, loss_g, config):
-    """
-    Guarda la gráfica de las pérdidas (Loss_D y Loss_G) a lo largo del entrenamiento.
-
-    Args:
-        loss_d (list): Lista de pérdidas del Discriminador.
-        loss_g (list): Lista de pérdidas del Generador.
-        config (dict): Configuración actual.
-    """
-    plot_path = os.path.join(config['PLOT_PATH'], "loss_plot.png")
-    os.makedirs(config['PLOT_PATH'], exist_ok=True)
-    
-    plt.figure(figsize=(10, 5))
-    plt.plot(loss_d, label='Loss_D')
-    plt.plot(loss_g, label='Loss_G')
-    plt.xlabel('Epoch')
+def save_loss_plot(G_losses, D_losses, plot_path):
+    """Save the loss plot to the specified path."""
+    plt.figure()
+    plt.plot(G_losses, label='Generator Loss')
+    plt.plot(D_losses, label='Discriminator Loss')
+    plt.xlabel('Epochs')
     plt.ylabel('Loss')
-    plt.title('Generator and Discriminator Loss')
     plt.legend()
-    plt.savefig(plot_path)
+    plt.title('Generator and Discriminator Loss Over Epochs')
+    plt.savefig(os.path.join(plot_path, 'loss_plot.png'))
     plt.close()
-    
-    print(f"✅ Gráfica de pérdidas guardada en: {plot_path}")
+
+def save_models(generator, discriminator, model_path):
+    """Save the generator and discriminator models to the specified path."""
+    torch.save(generator.state_dict(), os.path.join(model_path, 'generator_final.pt'))
+    torch.save(discriminator.state_dict(), os.path.join(model_path, 'discriminator_final.pt'))

@@ -1,0 +1,20 @@
+{
+    "EPOCHS": 167,
+    "BATCH_SIZE": 32,
+    "BETA1": 0.866494591505947,
+    "BETA2": 0.9479925667502926,
+    "LATENT_DIM": 128,
+    "SAVE_FINAL_MODEL_ONLY": true,
+    "LR": 0.0001,
+    "EARLY_STOPPING_PATIENCE": 100,
+    "EARLY_STOPPING_MIN_DELTA": 0.001,
+    "DATA_PATH": "./data/raw/kitpvc/",
+    "DATASET": "kitpvc",
+    "MODEL_PATH": "./experiments/final_experiment/models",
+    "PLOT_PATH": "./experiments/final_experiment/plots",
+    "LOG_PATH": "./experiments/final_experiment/logs",
+    "EXPERIMENT_PATH": "./experiments",
+    "LEARNING_RATE_GENERATOR": 0.006774253961979485,
+    "LEARNING_RATE_DISCRIMINATOR": 1.0361630508544675e-05,
+    "MODEL_TYPE": "simple"
+}

@@ -1,0 +1,14 @@
+aliases: []
+creation_timestamp: 1735785605205
+current_stage: None
+description: null
+last_updated_timestamp: 1735785605205
+name: GAN_Discriminator
+run_id: 4b8d760027c74ea2af261c60bc2f0815
+run_link: null
+source: file:///workspace/test/mlruns/892165685160156122/4b8d760027c74ea2af261c60bc2f0815/artifacts/discriminator
+status: READY
+status_message: null
+storage_location: file:///workspace/test/mlruns/892165685160156122/4b8d760027c74ea2af261c60bc2f0815/artifacts/discriminator
+user_id: null
+version: 16

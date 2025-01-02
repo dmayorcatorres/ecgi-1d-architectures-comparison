@@ -1,0 +1,7 @@
+mlflow==2.19.0
+astunparse==1.6.3
+cloudpickle==3.1.0
+numpy==1.26.3
+pandas==2.2.3
+torch==2.5.1
+tqdm==4.65.0

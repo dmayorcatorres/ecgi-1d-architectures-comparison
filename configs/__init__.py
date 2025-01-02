@@ -1,8 +1,13 @@
-import os
 import yaml
+import os
 
-# Cargar la configuración base
-BASE_CONFIG_PATH = os.path.join(os.path.dirname(__file__), 'base.yaml')
+def load_config():
+    config_path = os.path.join(os.path.dirname(__file__), 'base.yml')
+    if not os.path.exists(config_path):
+        raise FileNotFoundError(f"❌ Archivo de configuración no encontrado en: {config_path}")
+    
+    with open(config_path, 'r') as file:
+        return yaml.safe_load(file)
 
-with open(BASE_CONFIG_PATH, 'r') as file:
-    config = yaml.safe_load(file)
+# Cargar la configuración desde base.yml
+config = load_config()
