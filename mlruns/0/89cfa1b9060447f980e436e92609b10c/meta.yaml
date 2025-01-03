@@ -1,0 +1,15 @@
+artifact_uri: file:///workspace/test/mlruns/0/89cfa1b9060447f980e436e92609b10c/artifacts
+end_time: 1735846655582
+entry_point_name: ''
+experiment_id: '0'
+lifecycle_stage: active
+run_id: 89cfa1b9060447f980e436e92609b10c
+run_name: unleashed-bee-25
+run_uuid: 89cfa1b9060447f980e436e92609b10c
+source_name: ''
+source_type: 4
+source_version: ''
+start_time: 1735846655438
+status: 3
+tags: []
+user_id: root

@@ -4,12 +4,6 @@ import os
 import torch
 from torch.utils.data import TensorDataset
 
-def tanh_normalization(y):
-    """
-    Normaliza los datos usando una transformación tanh.
-    """
-    return 2 * (y - np.min(y)) / (np.max(y) - np.min(y)) - 1
-
 def load_data(data_path, dataset_name):
     """
     Carga los datos desde un archivo .mat.
@@ -36,6 +30,5 @@ def prepare_dataset(data_path, dataset_name):
         TensorDataset: Dataset PyTorch listo para su uso.
     """
     _, y, _, _ = load_data(data_path, dataset_name)
-    y = tanh_normalization(y)
     y = torch.tensor(y, dtype=torch.float32)
     return TensorDataset(y)
