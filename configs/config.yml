@@ -18,7 +18,7 @@ MODEL:
 
 # Entrenamiento
 TRAINING:
-  EPOCHS: 50                           # Valor fijo
+  EPOCHS: 500                           # Valor fijo
 
 # Loggers y dispositivos
 LOGGING:

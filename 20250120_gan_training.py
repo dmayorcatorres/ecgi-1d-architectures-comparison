@@ -3,7 +3,7 @@ import torch
 import os
 import time
 from configs import load_config
-from models import SimpleGenerator, SimpleDiscriminator
+from models.simple_gan import SimpleGenerator, SimpleDiscriminator
 from data import data_loader
 import scipy.io as sio
 from torch.utils.data import TensorDataset
@@ -57,7 +57,7 @@ def objective(trial):
 # Crear un estudio y optimizar
 if __name__ == "__main__":
     study = optuna.create_study(direction="minimize")  # Cambiar a "minimize" si optimizas pérdida
-    study.optimize(objective, n_trials=50)
+    study.optimize(objective, n_trials=100)
     # Mostrar el mejor conjunto de hiperparámetros
     print("Best hyperparameters:", study.best_params)
     print("Best score:", study.best_value)
