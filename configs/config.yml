@@ -5,12 +5,12 @@ GENERAL:
 
 # Ranges para la búsqueda de hiperparámetros
 RANGES:
-  LATENT_DIM: [32, 64, 128, 256]       # Valores predefinidos (categoría discreta)
-  BATCH_SIZE: [16, 32, 64, 128]        # Valores predefinidos (categoría discreta)
-  DROPOUT: [0.1, 0.3, 0.5, 0.7]        # Valores predefinidos (categoría discreta)
-  LEARNING_RATE_RANGE: [0.0001, 0.01]    # Rango continuo (min, max)
-  BETA1_RANGE: [0.5, 0.9]              # Rango continuo (min, max)
-  BETA2_RANGE: [0.9, 0.999]            # Rango continuo (min, max)
+  LATENT_DIM: [32]       # Valores predefinidos (categoría discreta)
+  BATCH_SIZE: [16]        # Valores predefinidos (categoría discreta)
+  DROPOUT: [0.1]        # Valores predefinidos (categoría discreta)
+  LEARNING_RATE_RANGE: [0.001, 0.01]    # Rango continuo (min, max)
+  BETA1_RANGE: [0.5, 0.6]              # Rango continuo (min, max)
+  BETA2_RANGE: [0.9, 0.92]            # Rango continuo (min, max)
 
 # Configuración del modelo
 MODEL:
@@ -18,7 +18,7 @@ MODEL:
 
 # Entrenamiento
 TRAINING:
-  EPOCHS: 500                           # Valor fijo
+  EPOCHS: 50                           # Valor fijo
 
 # Loggers y dispositivos
 LOGGING:
