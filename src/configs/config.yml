@@ -1,7 +1,6 @@
 # Configuración general
 GENERAL:
-  DATA_PATH: "/workspace/pytorch_project/data/raw/kitpvc/"
-  DATASET: "kitpvc"
+  DATA_PATH: "/workspace/pytorch_project/data/raw/kitpvc/kitpvc_data.mat"
 
 # Ranges para la búsqueda de hiperparámetros
 RANGES:

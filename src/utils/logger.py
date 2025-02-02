@@ -35,3 +35,12 @@ def setup_logging(exp_dir=None):
             logger.addHandler(file_handler)
     
     return logger
+
+def handle_optimization_exception(e, logger=None):
+    """
+    Maneja excepciones y registra los detalles de error.
+    """
+    if logger:
+        logger.exception("Ocurrió un error durante la optimización.")
+    else:
+        print(f"❌ Error sin logger: {e}")
