@@ -1,0 +1,10 @@
+{
+    "MSE": 19.994199752807617,
+    "SSIM": 0.20405108777243058,
+    "Cosine Similarity": 0.09486600596682435,
+    "DTW Distance": 1721.1066136342629,
+    "Total Variation Distance": 3.1376399993896484,
+    "Wasserstein Distance": 2.719095825486109,
+    "Spectral Entropy Difference": 1.9959743905120297,
+    "Wavelet Energy Distance": 212838.65625
+}
