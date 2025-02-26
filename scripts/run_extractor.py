@@ -19,8 +19,8 @@ import logging
 import pandas as pd
 import optuna
 
-from src.data.ECGiDataset import ECGiDataset
-from src.utils.ECGMetricsComparator import ECGMetricsComparator
+from src.ecgi.ECGiDataset import ECGiDataset
+from src.ecgi.ECGMetricsComparator import ECGMetricsComparator
 from src.models.cnn_models import RawCNNBase
 
 # Configuración de datos y dispositivo
@@ -53,15 +53,14 @@ variants = ["simple", "fcn", "resnet", "dilated", "disjoint", "multiscale", "mc-
 # Función objetivo para Optuna (solo hiperparámetros generales)
 #############################################
 def objective(trial, variant):
-    # Hiperparámetro general: tasa de aprendizaje
+    # Ajuste de hiperparámetros generales (por ejemplo, lr)
     lr = trial.suggest_float("lr", 1e-4, 1e-2, log=True)
-
-    # Instanciar el modelo usando la misma interfaz para todas las variantes
-    model = RawCNNBase(variant=variant, time_steps=T,
-                        input_channels=input_channels,
+    
+    # Instanciar el modelo (usando la misma interfaz para todas las variantes)
+    model = RawCNNBase(variant=variant, time_steps=T, input_channels=input_channels,
                         output_channels=output_channels)
     model.to(device)
-
+    
     optimizer = optim.Adam(model.parameters(), lr=lr)
     criterion = nn.MSELoss()
 
@@ -81,7 +80,7 @@ def objective(trial, variant):
             epoch_loss += loss.item() * inputs.size(0)
         epoch_loss /= len(train_loader.dataset)
 
-    # Evaluación en validación
+    # Evaluación en el conjunto de validación
     model.eval()
     all_predictions = []
     all_targets = []
@@ -96,11 +95,10 @@ def objective(trial, variant):
 
     comparator = ECGMetricsComparator(fs=1000)
     comparator.set_time_domain_signals(all_targets, all_predictions)
-    cc_mean, _ = comparator.compute_time_cc()
-    (_, _), (rmse_mean, _) = comparator.compute_time_mse_rmse()
+    cc_mean, _ = comparator.compute_time_cc()  # Queremos maximizar CC → minimizar (1 - cc_mean)
+    (_, _), (rmse_mean, _) = comparator.compute_time_mse_rmse()  # Minimizar RMSE
 
-    # Objetivo: minimizar (1 - CC_mean) + RMSE_mean
-    return (1 - cc_mean) + rmse_mean
+    return (1 - cc_mean, rmse_mean)
 
 #############################################
 # Optimización con Optuna para cada variante
@@ -108,14 +106,19 @@ def objective(trial, variant):
 best_results = {}
 for var in variants:
     print(f"\n=== Optimización para variante: {var} ===")
-    study = optuna.create_study(direction="minimize")
+    study = optuna.create_study(directions=["minimize", "minimize"])
     study.optimize(lambda trial: objective(trial, variant=var), n_trials=30)
-    best_trial = study.best_trial
+    
+    # Obtener la lista de mejores trials (soluciones Pareto)
+    best_trials = study.best_trials
+    # Seleccionar el trial con el menor RMSE (segundo objetivo)
+    best_trial = min(best_trials, key=lambda t: t.values[1])
+    
     best_results[var] = {
-        'best_value': best_trial.value,
+        'best_value': best_trial.values,
         'params': best_trial.params
     }
-    print(f"Mejor trial para {var}: Value = {best_trial.value}, Params = {best_trial.params}")
+    print(f"Mejor trial para {var}: Value = {best_trial.values}, Params = {best_trial.params}")
 
 #############################################
 # Reentrenamiento con los mejores hiperparámetros (solo lr se usa) y cálculo de métricas finales
