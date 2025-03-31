@@ -60,7 +60,7 @@ class DisjointBlock(nn.Module):
         x = x.squeeze(2)  # (B, out_filters, T)
         return x
 
-class LSTMDisjoint(nn.Module):
+class DisjointLSTM(nn.Module):
     def __init__(self, time_steps: int, input_channels: int, output_channels: int,
                  num_filters: int = 32, lstm_hidden: int = 16):
         """
@@ -77,7 +77,7 @@ class LSTMDisjoint(nn.Module):
         
         La entrada se espera en forma (B, input_channels, T) y la salida en (B, output_channels, T).
         """
-        super(LSTMDisjoint, self).__init__()
+        super(DisjointLSTM, self).__init__()
         self.time_steps = time_steps
         self.input_channels = input_channels
         self.output_channels = output_channels

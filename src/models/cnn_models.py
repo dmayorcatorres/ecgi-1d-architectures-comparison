@@ -4,17 +4,16 @@ from typing import Type
 
 # Importar los modelos (asegúrese de que los nombres de las clases importadas sean correctos)
 from src.models.ResNet import ResNet
-from src.models.Dilated2DCNN import Dilated2DCNN
-from src.models.Disjoint2DCNN import Disjoint2DCNN
+from src.models.DilatedCNN import DilatedCNN
+from src.models.DisjointCNN import DisjointCNN
 from src.models.FCN import FCN
 from src.models.MultiScaleCNN import MultiScaleCNN
 from src.models.MultiChannelDCNN import MultiChannelDCNN
-from src.models.MCCNN import MCCNN
-from src.models.ZHMCCNN import ZHMCCNN  # Ajuste el nombre de la clase si es diferente
+from src.models.ZhaoCNN import ZhaoCNN  # Ajuste el nombre de la clase si es diferente
 from src.models.ResNetCNN import ResNetCNN
 from src.models.InceptionTime import InceptionTime  
-from src.models.LSTM_FCN import LSTM_FCN
-from src.models.LSTMDisjoint import LSTMDisjoint
+from src.models.CNN_LSTM import CNN_LSTM
+from src.models.DisjointLSTM import DisjointLSTM
 from src.models.DisjointResNet import DisjointResNet
 from src.models.LITE import LITE
 
@@ -53,20 +52,21 @@ class RawCNNBase(nn.Module):
 
         # Diccionario que asocia la variante con la clase correspondiente.
         model_dict: dict[str, Type[nn.Module]] = {
+            "dilatedcnn": DilatedCNN,
+            "disjointcnn": DisjointCNN,
+            "disjointlstm": DisjointLSTM,
+            "disjointresnet": DisjointResNet,
             "fcn": FCN,
-            "resnet": ResNet,  # Aquí se asume que ResNetCNNModel es importado como ResNetCNN
-            "dilated": Dilated2DCNN,
-            "disjoint": Disjoint2DCNN,
-            "mc-dcnn": MultiChannelDCNN,
-            "mc-cnn": MCCNN,
-            "zhmc-cnn": ZHMCCNN,
-            "res-cnn": ResNetCNN,
-            "inception": InceptionTime,
-            "lstm-fcn": LSTM_FCN,
-            "lstm-disjoint": LSTMDisjoint,
-            "disjoint-resnet": DisjointResNet,
-            "lite": LITE
+            "inceptiontime": InceptionTime,
+            "lite": LITE,
+            "cnnlstm": CNN_LSTM,
+            "multichanneldcnn": MultiChannelDCNN,
+            "multiscalecnn": MultiScaleCNN,
+            "resnet": ResNet,
+            "resnetcnn": ResNetCNN,
+            "zhaocnn": ZhaoCNN
         }
+
 
         if self.variant in model_dict:
             self.model = model_dict[self.variant](time_steps, input_channels, output_channels, **kwargs)

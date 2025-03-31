@@ -66,7 +66,7 @@ class DisjointBlock(nn.Module):
         x = x.squeeze(2)
         return x
 
-class Disjoint2DCNN(nn.Module):
+class DisjointCNN(nn.Module):
     def __init__(self, time_steps: int, input_channels: int, output_channels: int, num_filters: int = 32):
         """
         Parámetros:
@@ -107,3 +107,4 @@ class Disjoint2DCNN(nn.Module):
         # Capa final 1D: mapea de num_filters a output_channels sin alterar T
         fc_out = self.final_conv(x)  # (B, output_channels, T)
         return fc_out
+    

@@ -59,12 +59,20 @@ logger = logging.getLogger(__name__)
 class TrainingConfig:
     data_path: str = os.path.join(os.path.dirname(__file__), "..", "data", "raw", "kitpvc", "kitpvc_data.mat")
     batch_size: int = 1
-    optuna_epochs: int = 1      # Épocas por trial en la optimización
-    final_epochs: int = 1       # Épocas en el entrenamiento final
-    optuna_trials: int = 1       # Número de trials a ejecutar
+    optuna_epochs: int = 50      # Épocas por trial en la optimización
+    final_epochs: int = 100       # Épocas en el entrenamiento final
+    optuna_trials: int = 10       # Número de trials a ejecutar
     # Lista de variantes a probar
-    #variants: Tuple[str, ...] = (  "res-cnn", "lstm-fcn", "lstm-disjoint", "disjoint-resnet", "lite",)
-    variants: Tuple[str, ...] = ("fcn", "resnet", "dilated", "disjoint", "mc-dcnn", "mc-cnn", "inception", "lstm-fcn", "lstm-disjoint", "disjoint-resnet", "lite")
+    variants: Tuple[str, ...] = (
+        "dilatedcnn", "disjointcnn", "disjointlstm", "disjointresnet", "fcn", 
+        "inceptiontime", "lite", "cnnlstm", "multichanneldcnn", "multiscalecnn",
+        "resnet", "resnetcnn", "zhaocnn"
+    )
+    #variants: Tuple[str, ...] = (
+    #   "multiscalecnn"
+    #)
+
+
     #variants: Tuple[str, ...] = ("res-cnn", "mccnn","zhmc-cnn",)
     best_variant: str = "lite"
     verbose: bool = False         # Controla la verbosidad de los logs
@@ -109,64 +117,81 @@ class HyperparameterOptimizer:
         Retorna:
           - Dict[str, Any]: Diccionario de hiperparámetros sugeridos para la variante.
         """
-        variant = variant.lower()
+        
         param_map: Dict[str, Any] = {
-            "fcn": lambda: {
-                "stage1_out": trial.suggest_int("stage1_out", 32, 128, step=32)
-            },
-            "resnet": lambda: {
-                "stage1_out": trial.suggest_int("stage1_out_resnet", 32, 128, step=32),
-                "stage2_out": trial.suggest_int("stage2_out_resnet", 64, 256, step=32),
-                "stage3_out": trial.suggest_int("stage3_out_resnet", 64, 256, step=32)
-            },
-            "dilated": lambda: {
+
+            "dilatedcnn": lambda: {
                 "num_filters": trial.suggest_int("num_filters", 32, 64, step=32),
                 "fc_units": trial.suggest_int("fc_units", 64, 512, step=64) 
             },
-            "disjoint": lambda: {
+            "disjointcnn": lambda: {
                 "num_filters": trial.suggest_int("num_filters", 32, 128, step=32)
             },
-            "mc-dcnn": lambda: {
-                "sub_channels": trial.suggest_int("sub_channels", 32, 64, step=32)
-            },
-            "res-cnn": lambda: {
-                "conv_in_out": trial.suggest_int("conv_in_out", 32, 128, step=32),
-            },
-            "mc-cnn" : lambda: {
-                "stage1_out": trial.suggest_int("stage1_out", 32, 256, step=32),
-                "stage2_out": trial.suggest_int("stage2_out", 32, 256, step=32),
-                "stage3_out": trial.suggest_int("stage3_out", 32, 256, step=32)
-            },
-            "zhmc-cnn" : lambda: {
-                "stage1_out": trial.suggest_int("stage1_out", 32, 256, step=32),
-                "stage2_out": trial.suggest_int("stage2_out", 32, 256, step=32),
-                "stage3_out": trial.suggest_int("stage3_out", 32, 256, step=32)
-            },
-            "inception": lambda: {
-                "num_filters": trial.suggest_int("num_filters", 32, 128, step=32),
-                "bottleneck_channels": trial.suggest_int("bottleneck_channels", 16, 64, step=16)
-            },
-            "lstm-fcn" : lambda: {                
-                "stage1_out": trial.suggest_int("stage1_out", 32, 256, step=32),
-                "stage2_out": trial.suggest_int("stage2_out", 32, 256, step=32),
-                "stage3_out": trial.suggest_int("stage3_out", 32, 256, step=32),
-                "lstm_out": trial.suggest_int("lstm_out", 8, 64, step=8)
-            },
-            "lstm-disjoint" : lambda: {
+            "disjointlstm" : lambda: {
                 "num_filters": trial.suggest_int("num_filters", 32, 128, step=32),
                 "lstm_hidden": trial.suggest_int("lstm_hidden", 8, 32, step=8)
             },
-            "disjoint-resnet" : lambda: {
+            "disjointresnet" : lambda: {
                 "n_feature_maps": trial.suggest_int("n_feature_maps", 32, 128, step=32),
+            },
+            "fcn": lambda: {
+                "stage1_out": trial.suggest_int("stage1_out", 32, 128, step=32)
+            },
+            "inceptiontime": lambda: {
+                "num_filters": trial.suggest_int("num_filters", 32, 128, step=32),
+                "bottleneck_channels": trial.suggest_int("bottleneck_channels", 16, 64, step=16)
             },
             "lite": lambda: {
                 "n_filters": trial.suggest_int("n_filters", 32, 128, step=32),
                 "base_kernel_size": trial.suggest_int("base_kernel_size", 20, 60, step=20),
                 "use_custom_filters": trial.suggest_categorical("use_custom_filters", [True, False])
-            }
+            },
+            "cnnlstm" : lambda: {                
+                "stage1_out": trial.suggest_int("stage1_out", 32, 256, step=32),
+                "stage2_out": trial.suggest_int("stage2_out", 32, 256, step=32),
+                "stage3_out": trial.suggest_int("stage3_out", 32, 256, step=32),
+                "lstm_out": trial.suggest_int("lstm_out", 8, 64, step=8)
+            },
+            "multiscalecnn" : lambda: {
+                "stage1_out": trial.suggest_int("stage1_out", 32, 256, step=32),
+                "stage2_out": trial.suggest_int("stage2_out", 32, 256, step=32),
+                "stage3_out": trial.suggest_int("stage3_out", 32, 256, step=32)
+            },
+
+            "multichanneldcnn": lambda: {
+                "sub_channels": trial.suggest_int("sub_channels", 32, 64, step=32)
+            },
+
+            "resnet": lambda: {
+                "stage1_out": trial.suggest_int("stage1_out_resnet", 32, 128, step=32),
+                "stage2_out": trial.suggest_int("stage2_out_resnet", 64, 256, step=32),
+                "stage3_out": trial.suggest_int("stage3_out_resnet", 64, 256, step=32)
+            },
+
+            "resnetcnn": lambda: {
+                "conv_in_out": trial.suggest_int("conv_in_out", 32, 128, step=32),
+            },
+            "zhaocnn" : lambda: {
+                "stage1_out": trial.suggest_int("stage1_out", 32, 256, step=32),
+                "stage2_out": trial.suggest_int("stage2_out", 32, 256, step=32),
+                "stage3_out": trial.suggest_int("stage3_out", 32, 256, step=32)
+            },
+            "cnngru": lambda: {
+                "stage1_out": trial.suggest_int("stage1_out", 32, 256, step=32),
+                "stage2_out": trial.suggest_int("stage2_out", 32, 256, step=32),
+                "stage3_out": trial.suggest_int("stage3_out", 32, 256, step=32),
+                "gru_hidden": trial.suggest_int("gru_hidden", 8, 64, step=8)
+            },
+            "cnnlstmgru": lambda: {
+                "stage1_out": trial.suggest_int("stage1_out", 32, 256, step=32),
+                "stage2_out": trial.suggest_int("stage2_out", 32, 256, step=32),
+                "stage3_out": trial.suggest_int("stage3_out", 32, 256, step=32),
+                "lstm_out": trial.suggest_int("lstm_out", 8, 64, step=8),
+                "gru_hidden": trial.suggest_int("gru_hidden", 8, 64, step=8)
+            },
 
         }
-        
+
         if variant not in param_map:
             raise ValueError(f"Variante desconocida: {variant}")
         params = param_map[variant]()
@@ -250,6 +275,10 @@ class ExperimentRunner:
         logger.info("Iniciando preparación de datos...")
         self.emg_tensor = self.ecgi_dataset.emg_tensor.cpu()
         self.ecg_tensor = self.ecgi_dataset.ecg_tensor.cpu()
+
+        print("Tamaño de emg_tensor:", self.emg_tensor.shape)
+        print("Tamaño de ecg_tensor:", self.ecg_tensor.shape)
+
         
         # División secuencial: 80% entrenamiento, 20% validación
         split_idx = int(0.8 * len(self.emg_tensor))

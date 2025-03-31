@@ -3,7 +3,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from typing import Optional, Union, List
 
-class Dilated2DCNN(nn.Module):
+class DilatedCNN(nn.Module):
     """
     Dilated2DCNN:
     

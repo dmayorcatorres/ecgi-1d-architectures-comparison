@@ -20,7 +20,7 @@ class SqueezeExciteBlock(nn.Module):
         se = self.sigmoid(se)
         return x * se  # Broadcast a lo largo de T
 
-class LSTM_FCN(nn.Module):
+class CNN_LSTM(nn.Module):
     def __init__(self, time_steps: int, input_channels: int, output_channels: int,
                  stage1_out: int = 128, stage2_out: int = 128, stage3_out: int = 128, lstm_out: int = 16):
         """
@@ -33,7 +33,7 @@ class LSTM_FCN(nn.Module):
           
         La entrada se espera en forma (B, input_channels, T) y la salida será (B, output_channels, T).
         """
-        super(LSTM_FCN, self).__init__()
+        super(CNN_LSTM, self).__init__()
         # Rama CNN
         # Bloque 1: conv1d con kernel 8, padding "same"
         self.conv1 = nn.Conv1d(in_channels=input_channels, out_channels=stage1_out, kernel_size=8, padding='same', bias=False)
