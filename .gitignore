@@ -4,3 +4,5 @@
 *.mat
 *.h5
 *.npz
+*.npy
+*.png

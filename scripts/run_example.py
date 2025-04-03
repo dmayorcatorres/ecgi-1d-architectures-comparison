@@ -57,14 +57,15 @@ logger = logging.getLogger(__name__)
 ###############################################################################
 @dataclass
 class TrainingConfig:
-    data_path: str = os.path.join(os.path.dirname(__file__), "..", "data", "raw", "kitpvc", "kitpvc_data.mat")
+    #data_path: str = os.path.join(os.path.dirname(__file__), "..", "data", "raw", "kitpvc", "kitpvc_data.mat")
+    data_path: str = os.path.join(os.path.dirname(__file__), "..", "data", "raw", "auckland", "auckland_data.mat")
     batch_size: int = 1
     optuna_epochs: int = 50      # Épocas por trial en la optimización
     final_epochs: int = 100       # Épocas en el entrenamiento final
     optuna_trials: int = 10       # Número de trials a ejecutar
     # Lista de variantes a probar
     variants: Tuple[str, ...] = (
-        "dilatedcnn", "disjointcnn", "disjointlstm", "disjointresnet", "fcn", 
+        "disjointcnn", "disjointlstm", "disjointresnet", "fcn", #"dilatedcnn",
         "inceptiontime", "lite", "cnnlstm", "multichanneldcnn", "multiscalecnn",
         "resnet", "resnetcnn", "zhaocnn"
     )

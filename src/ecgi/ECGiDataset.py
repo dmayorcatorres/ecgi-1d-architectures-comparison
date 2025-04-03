@@ -19,10 +19,11 @@ class DatasetConfig:
     wavelet: str = 'morl'
     scales: np.ndarray = field(default_factory=lambda: np.arange(1, 65))
     fs: int = 1000
+    # Ahora solo son obligatorios estos campos:
     required_structures: Tuple[str, ...] = ('heart', 'torso')
     required_signals: Tuple[str, ...] = ('ecg', 'emg')
     numeric_fields: Tuple[str, ...] = ('necg', 'nemg')
-    array_fields: Tuple[str, ...] = ('tag', 'lfm', 'lam')
+    array_fields: Tuple[str, ...] = ('tag',)  # Solo 'tags' es obligatorio en arrays
 
 class ECGiDataset:
     def __init__(self,
@@ -69,10 +70,17 @@ class ECGiDataset:
             raise
 
     def _validate_data_structure(self, raw_data: Dict[str, Any]) -> None:
-        required_fields = list(self.config.required_structures) + \
-                          list(self.config.required_signals) + \
-                          list(self.config.numeric_fields) + \
-                          list(self.config.array_fields)
+        """
+        Valida que los campos marcados como 'obligatorios' existan en el archivo .mat.
+        Si algún campo requerido no está presente, lanza una excepción.
+        """
+        required_fields = (
+            list(self.config.required_structures)
+            + list(self.config.required_signals)
+            + list(self.config.numeric_fields)
+            + list(self.config.array_fields)
+        )
+
         missing = [field for field in required_fields if field not in raw_data]
         if missing:
             raise ValueError(f"Missing required fields: {missing}")
@@ -108,6 +116,14 @@ class ECGiDataset:
     def _extract_metadata(self, raw_data: Dict[str, Any]) -> None:
         for field in self.config.numeric_fields:
             self.metadata[field] = int(raw_data.get(field, 0))
+
+        # 'tags' es el único campo de array obligatorio; los demás array-fields ya son opcionales.
+        # Si quieres procesar otros arrays opcionales, podrías hacer algo como:
+        # optional_array_fields = ['lfm', 'lam']  # u otros nombres
+        # for field in optional_array_fields:
+        #     if field in raw_data:
+        #         self.metadata[field] = self._get_numpy_array(raw_data.get(field))
+
         for field in self.config.array_fields:
             self.metadata[field] = self._get_numpy_array(raw_data.get(field))
 
@@ -151,8 +167,11 @@ class ECGiDataset:
     def summary(self) -> Dict[str, Any]:
         return {
             'signals': {k: np.array(v).shape for k, v in self.signals.items()},
-            'structures': {k: {f: (s.shape if s is not None else None) for f, s in v.items()}
-                           for k, v in self.structures.items()},
+            'structures': {
+                k: {f: (s.shape if s is not None else None)
+                    for f, s in v.items()}
+                for k, v in self.structures.items()
+            },
             'metadata': self.metadata,
             'device': str(self.device)
         }
@@ -178,3 +197,42 @@ class ECGiDataset:
         return (f"ECGiDataset(mat_file_path='{self.mat_file_path}', "
                 f"signals={list(self.signals.keys())}, "
                 f"structures={list(self.structures.keys())})")
+
+    @property
+    def summary(self) -> Dict[str, Any]:
+        # Ya definida en tu código
+        return {
+            'signals': {k: np.array(v).shape for k, v in self.signals.items()},
+            'structures': {
+                k: {f: (s.shape if s is not None else None)
+                    for f, s in v.items()}
+                for k, v in self.structures.items()
+            },
+            'metadata': self.metadata,
+            'device': str(self.device)
+        }
+
+    def print_summary(self) -> None:
+        """
+        Imprime un resumen amigable de las dimensiones de señales,
+        estructuras y metadatos.
+        """
+        summary_dict = self.summary
+        logger.info("=== ECGiDataset Summary ===")
+
+        # Imprimir shapes de señales
+        if 'signals' in summary_dict:
+            for sig_key, shape_ in summary_dict['signals'].items():
+                logger.info(f"Signal '{sig_key}': shape = {shape_}")
+        # Imprimir shapes de estructuras
+        if 'structures' in summary_dict:
+            for struct_name, fields in summary_dict['structures'].items():
+                logger.info(f"Structure '{struct_name}':")
+                for f_name, f_shape in fields.items():
+                    logger.info(f"  - {f_name}: {f_shape}")
+        # Imprimir metadatos
+        if 'metadata' in summary_dict:
+            logger.info(f"Metadata: {summary_dict['metadata']}")
+        # Dispositivo
+        if 'device' in summary_dict:
+            logger.info(f"Device: {summary_dict['device']}")
