@@ -5,7 +5,8 @@ from typing import Type
 # Importar los modelos (asegúrese de que los nombres de las clases importadas sean correctos)
 from src.models.ResNet import ResNet
 from src.models.DilatedCNN import DilatedCNN
-from src.models.DisjointCNN import DisjointCNN
+from src.models.cnn.DisjointCNN import DisjointCNN
+
 from src.models.FCN import FCN
 from src.models.MultiScaleCNN import MultiScaleCNN
 from src.models.MultiChannelDCNN import MultiChannelDCNN
@@ -13,9 +14,14 @@ from src.models.ZhaoCNN import ZhaoCNN  # Ajuste el nombre de la clase si es dif
 from src.models.ResNetCNN import ResNetCNN
 from src.models.InceptionTime import InceptionTime  
 from src.models.CNN_LSTM import CNN_LSTM
-from src.models.DisjointLSTM import DisjointLSTM
+from src.models.CNN_ALSTM import CNN_ALSTM
+from src.models.rnn.DisjointLSTM import DisjointLSTM
 from src.models.DisjointResNet import DisjointResNet
 from src.models.LITE import LITE
+from src.models.CNN_BIGRU import CNN_BiGRU
+#from src.models.BERT_BIGRU import BERT_BiGRU
+from src.models.DeepResidualBiLSTM import DeepResidualBiLSTM
+
 
 
 class RawCNNBase(nn.Module):
@@ -59,12 +65,16 @@ class RawCNNBase(nn.Module):
             "fcn": FCN,
             "inceptiontime": InceptionTime,
             "lite": LITE,
-            "cnnlstm": CNN_LSTM,
             "multichanneldcnn": MultiChannelDCNN,
             "multiscalecnn": MultiScaleCNN,
             "resnet": ResNet,
             "resnetcnn": ResNetCNN,
-            "zhaocnn": ZhaoCNN
+            "zhaocnn": ZhaoCNN,
+            "cnnlstm": CNN_LSTM,
+            "cnnalstm": CNN_ALSTM,
+            "cnnbigru": CNN_BiGRU,
+#            "bertbigru": BERT_BiGRU,
+            "deepresidualbilstm": DeepResidualBiLSTM,
         }
 
 

@@ -57,18 +57,28 @@ logger = logging.getLogger(__name__)
 ###############################################################################
 @dataclass
 class TrainingConfig:
-    #data_path: str = os.path.join(os.path.dirname(__file__), "..", "data", "raw", "kitpvc", "kitpvc_data.mat")
-    data_path: str = os.path.join(os.path.dirname(__file__), "..", "data", "raw", "auckland", "auckland_data.mat")
+    data_path: str = os.path.join(os.path.dirname(__file__), "..", "data", "kitpvc", "raw", "kitpvc_data.mat")
+    #data_path: str = os.path.join(os.path.dirname(__file__), "..", "data", "auckland", "raw", "auckland_data.mat")
     batch_size: int = 1
     optuna_epochs: int = 50      # Épocas por trial en la optimización
     final_epochs: int = 100       # Épocas en el entrenamiento final
     optuna_trials: int = 10       # Número de trials a ejecutar
-    # Lista de variantes a probar
+
     variants: Tuple[str, ...] = (
-        "disjointcnn", "disjointlstm", "disjointresnet", "fcn", #"dilatedcnn",
-        "inceptiontime", "lite", "cnnlstm", "multichanneldcnn", "multiscalecnn",
-        "resnet", "resnetcnn", "zhaocnn"
-    )
+            "disjointlstm", 
+        )
+    
+#    variants: Tuple[str, ...] = (
+#            "deepresidualbilstm", "cnnbigru", "cnnalstm", "cnnlstm", #"bertbigru", 
+#        )
+
+
+    # Lista de variantes a probar
+#    variants: Tuple[str, ...] = (
+#        "disjointcnn", "disjointlstm", "disjointresnet", "fcn", #"dilatedcnn",
+#        "inceptiontime", "lite", "cnnlstm", "multichanneldcnn", "multiscalecnn",
+#        "resnet", "resnetcnn", "zhaocnn"
+#    )
     #variants: Tuple[str, ...] = (
     #   "multiscalecnn"
     #)
@@ -147,12 +157,6 @@ class HyperparameterOptimizer:
                 "base_kernel_size": trial.suggest_int("base_kernel_size", 20, 60, step=20),
                 "use_custom_filters": trial.suggest_categorical("use_custom_filters", [True, False])
             },
-            "cnnlstm" : lambda: {                
-                "stage1_out": trial.suggest_int("stage1_out", 32, 256, step=32),
-                "stage2_out": trial.suggest_int("stage2_out", 32, 256, step=32),
-                "stage3_out": trial.suggest_int("stage3_out", 32, 256, step=32),
-                "lstm_out": trial.suggest_int("lstm_out", 8, 64, step=8)
-            },
             "multiscalecnn" : lambda: {
                 "stage1_out": trial.suggest_int("stage1_out", 32, 256, step=32),
                 "stage2_out": trial.suggest_int("stage2_out", 32, 256, step=32),
@@ -190,8 +194,43 @@ class HyperparameterOptimizer:
                 "lstm_out": trial.suggest_int("lstm_out", 8, 64, step=8),
                 "gru_hidden": trial.suggest_int("gru_hidden", 8, 64, step=8)
             },
+            "cnnlstm" : lambda: {                
+                "stage1_out": trial.suggest_int("stage1_out", 32, 128, step=32),
+                "stage2_out": trial.suggest_int("stage2_out", 32, 128, step=32),
+                "stage3_out": trial.suggest_int("stage3_out", 32, 128, step=32),
+                "lstm_out": trial.suggest_int("lstm_out", 8, 64, step=8)
+            },
+            "cnnalstm": lambda: {                
+                "stage1_out": trial.suggest_int("stage1_out", 32, 128, step=32),
+                "stage2_out": trial.suggest_int("stage2_out", 32, 128, step=32),
+                "stage3_out": trial.suggest_int("stage3_out", 32, 128, step=32),
+                "lstm_hidden": trial.suggest_int("lstm_hidden", 8, 64, step=8)  # <-- correcto
+            },
+            "cnnbigru": lambda: {                
+                "stage1_out": trial.suggest_int("stage1_out", 32, 128, step=32),
+                "stage2_out": trial.suggest_int("stage2_out", 32, 128, step=32),
+                "stage3_out": trial.suggest_int("stage3_out", 32, 128, step=32),
+                "gru_hidden": trial.suggest_int("gru_hidden", 8, 64, step=8)
+            },
+            # Por esto (nota que ahora es "bertbigru" y la lambda no incluye el parámetro trial):
+            "bertbigru": lambda: {
+                "hidden_dim": trial.suggest_int("hidden_dim", 64, 256, step=32),
+                "num_layers": trial.suggest_categorical("num_layers", [1, 2, 3]),
+                "dropout_prob": trial.suggest_float("dropout_prob", 0.1, 0.5, step=0.1),
+            },
+            "deepresidualbilstm": lambda: {
+                "hidden_dim": trial.suggest_int("hidden_dim", 32, 128, step=32),
+                "num_layers": trial.suggest_int("num_layers", 1, 5),
+                "dropout": trial.suggest_float("dropout", 0.1, 0.5)
+            }
+#            "bertbigru": lambda: {                
+#                "hidden_dim": trial.suggest_int("hidden_dim", 64, 256, step=32),
+#                "num_layers": trial.suggest_int("num_layers", 1, 3),
+#                "dropout_prob": trial.suggest_float("dropout_prob", 0.1, 0.5, step=0.1)
+#            },
+            
 
-        }
+        }   
 
         if variant not in param_map:
             raise ValueError(f"Variante desconocida: {variant}")
@@ -546,8 +585,6 @@ class ExperimentManager:
         new_df.to_excel(accumulative_xlsx_path, index=False)
         logger.info(f"Acumulado actualizado en Excel: {accumulative_xlsx_path}")
 
-        # 8) Guardar gráficos comunes de transformaciones en la carpeta principal
-        self.save_common_plots()
 
         logger.info("=== Experimento completado ===")
 
@@ -643,123 +680,6 @@ class ExperimentManager:
             
         logger.info(f"Resultados para {variant} guardados en {variant_dir}")
 
-
-    def save_common_plots(self):
-        """
-        Guarda ejemplos de gráficos de múltiples transformaciones 
-        (RPM, GAF, RP, JRP, CWT, DWT, STFT, Spectrogram, MTF)
-        en la carpeta principal de resultados.
-        """
-        transformer = TimeSeriesTo2DTransform(fs=1000.0)
-        visualizer = ECGiVisualizer(fs=1000)
-        
-        # Tomamos data_3d (ecg_tensor) como ejemplo
-        data_3d = self.runner.ecgi_dataset.ecg_tensor
-
-        # Ejemplo: Escogemos la señal 0 (signal_index=0), y submuestreamos 6 electrodos
-        sig_idx = 0
-        num_electrodes_to_plot = 6
-
-        # 1) RPM
-        rpm_tensor = transformer.transform(x=data_3d, method='rpm')
-        rpm_file = os.path.join(self.saver.run_dir, "plot_rpm.png")
-        visualizer.visualize_rpm(
-            rpm_tensor,
-            signal_index=sig_idx,
-            num_to_plot=num_electrodes_to_plot,
-            title_label='RPM Example',
-            save_path=rpm_file
-        )
-
-        # 2) GAF (ejemplo con summation)
-        gaf_tensor = transformer.transform(x=data_3d, method='gaf', gaf_mode='summation')
-        gaf_file = os.path.join(self.saver.run_dir, "plot_gaf_summation.png")
-        visualizer.visualize_gaf(
-            gaf_tensor,
-            signal_index=sig_idx,
-            num_to_plot=num_electrodes_to_plot,
-            title_label='GAF Summation',
-            save_path=gaf_file
-        )
-
-        # 3) MTF
-        mtf_tensor = transformer.transform(x=data_3d, method='mtf', n_bins=8)
-        mtf_file = os.path.join(self.saver.run_dir, "plot_mtf.png")
-        visualizer.visualize_mtf(
-            mtf_tensor,
-            signal_index=sig_idx,
-            num_to_plot=num_electrodes_to_plot,
-            title_label='MTF Example',
-            save_path=mtf_file
-        )
-
-        # 4) RP
-        rp_tensor = transformer.transform(x=data_3d, method='rp', threshold=0.2)
-        rp_file = os.path.join(self.saver.run_dir, "plot_rp.png")
-        visualizer.visualize_rp(
-            rp_tensor,
-            signal_index=sig_idx,
-            num_to_plot=num_electrodes_to_plot,
-            title_label='RP Example',
-            save_path=rp_file
-        )
-
-        # 5) JRP
-        jrp_tensor = transformer.transform(x=data_3d, method='jrp', embedding_dim=3, time_delay=1, threshold=0.1)
-        jrp_file = os.path.join(self.saver.run_dir, "plot_jrp.png")
-        visualizer.visualize_jrp(
-            jrp_tensor,
-            signal_index=sig_idx,
-            num_to_plot=num_electrodes_to_plot,
-            title_label='JRP Example',
-            save_path=jrp_file
-        )
-
-        # 6) STFT
-        stft_tensor = transformer.transform(x=data_3d, method='stft', window_type='hann', nperseg=256)
-        stft_file = os.path.join(self.saver.run_dir, "plot_stft.png")
-        visualizer.visualize_stft(
-            stft_tensor,
-            signal_index=sig_idx,
-            num_to_plot=num_electrodes_to_plot,
-            title_label='STFT Example',
-            save_path=stft_file
-        )
-
-        # 7) Spectrogram
-        spectro_tensor = transformer.transform(x=data_3d, method='spectrogram', nperseg=32, noverlap=16)
-        spectro_file = os.path.join(self.saver.run_dir, "plot_spectrogram.png")
-        visualizer.visualize_spectrogram(
-            spectro_tensor,
-            signal_index=sig_idx,
-            num_to_plot=num_electrodes_to_plot,
-            title_label='Spectrogram Example',
-            save_path=spectro_file
-        )
-
-        # 8) CWT
-        cwt_tensor = transformer.transform(x=data_3d, method='cwt', wavelet_type='morlet')
-        cwt_file = os.path.join(self.saver.run_dir, "plot_cwt.png")
-        visualizer.visualize_cwt(
-            cwt_tensor,
-            signal_index=sig_idx,
-            num_to_plot=num_electrodes_to_plot,
-            title_label='CWT Example',
-            save_path=cwt_file
-        )
-
-        # 9) DWT
-        dwt_tensor = transformer.transform(x=data_3d, method='dwt', wavelet='db4')
-        dwt_file = os.path.join(self.saver.run_dir, "plot_dwt.png")
-        ECGiVisualizer.visualize_dwt(
-            dwt_tensor,
-            signal_index=sig_idx,
-            num_to_plot=num_electrodes_to_plot,
-            wavelet_label='DWT Example',
-            save_path=dwt_file
-        )
-
-        logger.info(f"Se han guardado los gráficos de RPM, GAF, RP, JRP, CWT, DWT, STFT, Spectrogram y MTF en {self.saver.run_dir}")
 
 ###############################################################################
 # MAIN
