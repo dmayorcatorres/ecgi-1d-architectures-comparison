@@ -21,7 +21,7 @@ import optuna
 
 from src.ecgi.ECGiDataset import ECGiDataset
 from src.ecgi.ECGMetricsComparator import ECGMetricsComparator
-from src.models.cnn_models import RawCNNBase
+from src.models.models import RawCNNBase
 
 # Configuración de datos y dispositivo
 B, T = 8, 272                # n_signals y n_time

@@ -15,7 +15,7 @@ from torch.utils.data import TensorDataset, DataLoader
 ##########################################
 from src.ecgi.ECGiDataset import ECGiDataset
 from src.ecgi.ECGMetricsComparator import ECGMetricsComparator
-from src.models.cnn_models import RawCNNBase
+from src.models.models import RawCNNBase
 
 from src.ecgi.ECGiTransformManager import ECGiTransformManager
 from src.ecgi.ECGiTransformVisualizer import ECGiTransformVisualizer

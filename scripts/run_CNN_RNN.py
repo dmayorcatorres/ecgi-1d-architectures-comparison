@@ -1,701 +1,394 @@
-import sys
 import os
-import math
+import sys
 import logging
-import datetime
-from typing import Dict, Tuple, List, Optional, Any
-from dataclasses import dataclass
-import torch
-from torchviz import make_dot
-
+import time
+from typing import Dict, Any, Tuple, List, Optional
 import numpy as np
-import pandas as pd
-import matplotlib.pyplot as plt
-import optuna
-import logging
-from typing import Dict, Tuple, Any
 import torch
-import torch.nn as nn
-import torch.optim as optim
-import torch.nn.functional as F
-from torch.utils.data import TensorDataset, DataLoader
+from torch.utils.data import DataLoader, ConcatDataset, Subset
+from sklearn.model_selection import KFold
+from ignite.engine import Events
 
-import optuna
-from ignite.engine import Engine, Events
-from ignite.handlers import Timer
-from ignite.metrics import Loss
-
-# Habilitar cudnn.benchmark si los tamaños de entrada son fijos
-torch.backends.cudnn.benchmark = True
-
-# --- Ajuste de PYTHONPATH para entornos locales ---
+# Configurar paths
 project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
-if project_root not in sys.path:
-    sys.path.insert(0, project_root)
+sys.path.insert(0, project_root)
 
-try:
-    from src.ecgi.ECGiDataset import ECGiDataset, DatasetConfig
-    from src.ecgi.ECGMetricsComparator import ECGMetricsComparator
-    from src.ecgi.ECGiVisualizer import ECGiVisualizer
-    from src.ecgi.SignalProcessorTorch import SignalProcessorTorch
-    from src.models.cnn_models import RawCNNBase
-    from src.ecgi.ResultsSaver import ResultsSaver
-    from src.ecgi.TimeSeriesTo2DTransform import TimeSeriesTo2DTransform
-except ModuleNotFoundError as e:
-    logging.error("No se pudo encontrar el paquete 'src'. Verifica la estructura del proyecto y el PYTHONPATH.")
-    raise e
+# Importaciones locales
+from src.configs.base_config import TrainingConfig
+from src.data.datasets import ECGDataLoaderFactory
+from src.models.model_factory import ModelFactory
+from src.training.engines import TrainingEngine
+from src.optimization.optuna_optimizer import OptunaOptimizer
+from src.utils.visualization import ResultsVisualizer
+from src.ecgi.ECGMetricsComparator import ECGMetricsComparator
 
-logging.basicConfig(
-    level=logging.WARNING,
-    format='%(asctime)s - %(levelname)s - %(message)s',
-    handlers=[logging.StreamHandler()]
-)
+# Configurar logging
 logger = logging.getLogger(__name__)
 
-###############################################################################
-# Configuración del entrenamiento
-###############################################################################
-@dataclass
-class TrainingConfig:
-    data_path: str = os.path.join(os.path.dirname(__file__), "..", "data", "kitpvc", "raw", "kitpvc_data.mat")
-    #data_path: str = os.path.join(os.path.dirname(__file__), "..", "data", "auckland", "raw", "auckland_data.mat")
-    batch_size: int = 1
-    optuna_epochs: int = 50      # Épocas por trial en la optimización
-    final_epochs: int = 100       # Épocas en el entrenamiento final
-    optuna_trials: int = 10       # Número de trials a ejecutar
 
-    variants: Tuple[str, ...] = (
-            "disjointlstm", 
-        )
-    
-#    variants: Tuple[str, ...] = (
-#            "deepresidualbilstm", "cnnbigru", "cnnalstm", "cnnlstm", #"bertbigru", 
-#        )
-
-
-    # Lista de variantes a probar
-#    variants: Tuple[str, ...] = (
-#        "disjointcnn", "disjointlstm", "disjointresnet", "fcn", #"dilatedcnn",
-#        "inceptiontime", "lite", "cnnlstm", "multichanneldcnn", "multiscalecnn",
-#        "resnet", "resnetcnn", "zhaocnn"
-#    )
-    #variants: Tuple[str, ...] = (
-    #   "multiscalecnn"
-    #)
-
-
-    #variants: Tuple[str, ...] = ("res-cnn", "mccnn","zhmc-cnn",)
-    best_variant: str = "lite"
-    verbose: bool = False         # Controla la verbosidad de los logs
-
-###############################################################################
-# Clases auxiliares: DeviceManager, HyperparameterOptimizer, ModelTrainer
-###############################################################################
-class DeviceManager:
-    @staticmethod
-    def get_device() -> torch.device:
-        device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-        logger.info(f"Dispositivo usado: {device}")
-        return device
-
-
-logger = logging.getLogger(__name__)
-
-class HyperparameterOptimizer:
-    """
-    Optimizer de hiperparámetros para modelos CNN en series temporales.
-    
-    Esta clase permite muestrear y parsear hiperparámetros específicos para cada variante de
-    modelo utilizando Optuna. Las variantes disponibles son, por ejemplo:
-      - "fcn"
-      - "resnet"
-      - "dilated"
-      - "disjoint"
-    
-    Las funciones de muestreo y parseo se adaptan para que los hiperparámetros se pasen de
-    manera elegante al modelo.
-    """
-    
-    @staticmethod
-    def sample_hyperparams(trial: optuna.Trial, variant: str) -> Dict[str, Any]:
-        """
-        Muestrea hiperparámetros específicos para la variante del modelo utilizando Optuna.
-        
-        Parámetros:
-          - trial: Objeto de ensayo de Optuna.
-          - variant (str): Variante del modelo (ej., "fcn", "resnet", "dilated", "disjoint").
-        
-        Retorna:
-          - Dict[str, Any]: Diccionario de hiperparámetros sugeridos para la variante.
-        """
-        
-        param_map: Dict[str, Any] = {
-
-            "dilatedcnn": lambda: {
-                "num_filters": trial.suggest_int("num_filters", 32, 64, step=32),
-                "fc_units": trial.suggest_int("fc_units", 64, 512, step=64) 
-            },
-            "disjointcnn": lambda: {
-                "num_filters": trial.suggest_int("num_filters", 32, 128, step=32)
-            },
-            "disjointlstm" : lambda: {
-                "num_filters": trial.suggest_int("num_filters", 32, 128, step=32),
-                "lstm_hidden": trial.suggest_int("lstm_hidden", 8, 32, step=8)
-            },
-            "disjointresnet" : lambda: {
-                "n_feature_maps": trial.suggest_int("n_feature_maps", 32, 128, step=32),
-            },
-            "fcn": lambda: {
-                "stage1_out": trial.suggest_int("stage1_out", 32, 128, step=32)
-            },
-            "inceptiontime": lambda: {
-                "num_filters": trial.suggest_int("num_filters", 32, 128, step=32),
-                "bottleneck_channels": trial.suggest_int("bottleneck_channels", 16, 64, step=16)
-            },
-            "lite": lambda: {
-                "n_filters": trial.suggest_int("n_filters", 32, 128, step=32),
-                "base_kernel_size": trial.suggest_int("base_kernel_size", 20, 60, step=20),
-                "use_custom_filters": trial.suggest_categorical("use_custom_filters", [True, False])
-            },
-            "multiscalecnn" : lambda: {
-                "stage1_out": trial.suggest_int("stage1_out", 32, 256, step=32),
-                "stage2_out": trial.suggest_int("stage2_out", 32, 256, step=32),
-                "stage3_out": trial.suggest_int("stage3_out", 32, 256, step=32)
-            },
-
-            "multichanneldcnn": lambda: {
-                "sub_channels": trial.suggest_int("sub_channels", 32, 64, step=32)
-            },
-
-            "resnet": lambda: {
-                "stage1_out": trial.suggest_int("stage1_out_resnet", 32, 128, step=32),
-                "stage2_out": trial.suggest_int("stage2_out_resnet", 64, 256, step=32),
-                "stage3_out": trial.suggest_int("stage3_out_resnet", 64, 256, step=32)
-            },
-
-            "resnetcnn": lambda: {
-                "conv_in_out": trial.suggest_int("conv_in_out", 32, 128, step=32),
-            },
-            "zhaocnn" : lambda: {
-                "stage1_out": trial.suggest_int("stage1_out", 32, 256, step=32),
-                "stage2_out": trial.suggest_int("stage2_out", 32, 256, step=32),
-                "stage3_out": trial.suggest_int("stage3_out", 32, 256, step=32)
-            },
-            "cnngru": lambda: {
-                "stage1_out": trial.suggest_int("stage1_out", 32, 256, step=32),
-                "stage2_out": trial.suggest_int("stage2_out", 32, 256, step=32),
-                "stage3_out": trial.suggest_int("stage3_out", 32, 256, step=32),
-                "gru_hidden": trial.suggest_int("gru_hidden", 8, 64, step=8)
-            },
-            "cnnlstmgru": lambda: {
-                "stage1_out": trial.suggest_int("stage1_out", 32, 256, step=32),
-                "stage2_out": trial.suggest_int("stage2_out", 32, 256, step=32),
-                "stage3_out": trial.suggest_int("stage3_out", 32, 256, step=32),
-                "lstm_out": trial.suggest_int("lstm_out", 8, 64, step=8),
-                "gru_hidden": trial.suggest_int("gru_hidden", 8, 64, step=8)
-            },
-            "cnnlstm" : lambda: {                
-                "stage1_out": trial.suggest_int("stage1_out", 32, 128, step=32),
-                "stage2_out": trial.suggest_int("stage2_out", 32, 128, step=32),
-                "stage3_out": trial.suggest_int("stage3_out", 32, 128, step=32),
-                "lstm_out": trial.suggest_int("lstm_out", 8, 64, step=8)
-            },
-            "cnnalstm": lambda: {                
-                "stage1_out": trial.suggest_int("stage1_out", 32, 128, step=32),
-                "stage2_out": trial.suggest_int("stage2_out", 32, 128, step=32),
-                "stage3_out": trial.suggest_int("stage3_out", 32, 128, step=32),
-                "lstm_hidden": trial.suggest_int("lstm_hidden", 8, 64, step=8)  # <-- correcto
-            },
-            "cnnbigru": lambda: {                
-                "stage1_out": trial.suggest_int("stage1_out", 32, 128, step=32),
-                "stage2_out": trial.suggest_int("stage2_out", 32, 128, step=32),
-                "stage3_out": trial.suggest_int("stage3_out", 32, 128, step=32),
-                "gru_hidden": trial.suggest_int("gru_hidden", 8, 64, step=8)
-            },
-            # Por esto (nota que ahora es "bertbigru" y la lambda no incluye el parámetro trial):
-            "bertbigru": lambda: {
-                "hidden_dim": trial.suggest_int("hidden_dim", 64, 256, step=32),
-                "num_layers": trial.suggest_categorical("num_layers", [1, 2, 3]),
-                "dropout_prob": trial.suggest_float("dropout_prob", 0.1, 0.5, step=0.1),
-            },
-            "deepresidualbilstm": lambda: {
-                "hidden_dim": trial.suggest_int("hidden_dim", 32, 128, step=32),
-                "num_layers": trial.suggest_int("num_layers", 1, 5),
-                "dropout": trial.suggest_float("dropout", 0.1, 0.5)
-            }
-#            "bertbigru": lambda: {                
-#                "hidden_dim": trial.suggest_int("hidden_dim", 64, 256, step=32),
-#                "num_layers": trial.suggest_int("num_layers", 1, 3),
-#                "dropout_prob": trial.suggest_float("dropout_prob", 0.1, 0.5, step=0.1)
-#            },
-            
-
-        }   
-
-        if variant not in param_map:
-            raise ValueError(f"Variante desconocida: {variant}")
-        params = param_map[variant]()
-        logger.info(f"Hiperparámetros muestreados para {variant}: {params}")
-        return params
-
-    @staticmethod
-    def parse_params(params: Dict[str, Any], variant: str) -> Tuple[float, Dict[str, Any]]:
-        """
-        Extrae la tasa de aprendizaje y limpia las claves de los hiperparámetros específicos de la variante.
-
-        Se busca la tasa de aprendizaje bajo la clave 'lr_{variant}'. Las demás claves que terminen
-        en '_{variant}' se reformatean eliminando dicho sufijo.
-        
-        Parámetros:
-          - params: Diccionario con los hiperparámetros muestreados.
-          - variant (str): Variante del modelo (ej., "fcn", "resnet", etc.)
-        
-        Retorna:
-          - Tuple[float, Dict[str, Any]]: La tasa de aprendizaje y un diccionario con los hiperparámetros limpiados.
-        """
-        variant = variant.lower()
-        lr_key = f"lr_{variant}"
-        lr = params.get(lr_key, 1e-3)
-        overrides = {}
-        suffix = f"_{variant}"
-        for k, v in params.items():
-            if k.startswith(lr_key):
-                continue
-            # Si la clave termina con el sufijo, se elimina; de lo contrario, se conserva tal cual.
-            if k.endswith(suffix):
-                new_key = k[:-len(suffix)]
-                overrides[new_key] = v
-            else:
-                overrides[k] = v
-        logger.info(f"Parámetros parseados para {variant}: lr={lr}, overrides={overrides}")
-        return lr, overrides
-
-class ModelTrainer:
-    def __init__(self, device: torch.device):
-        self.device = device
-        self.criterion = nn.MSELoss()
-
-    def create_engines(self, model: nn.Module, optimizer: optim.Optimizer) -> Tuple[Engine, Engine]:
-        def train_step(engine, batch):
-            model.train()
-            inputs, targets = batch
-            inputs = inputs.to(self.device, non_blocking=True)
-            targets = targets.to(self.device, non_blocking=True)
-            optimizer.zero_grad()
-            preds = model(inputs)
-            loss = self.criterion(preds, targets)
-            loss.backward()
-            optimizer.step()
-            return loss.item()
-
-        def eval_step(engine, batch):
-            model.eval()
-            with torch.no_grad():
-                inputs, targets = batch
-                inputs = inputs.to(self.device, non_blocking=True)
-                targets = targets.to(self.device, non_blocking=True)
-                return model(inputs), targets
-
-        train_engine = Engine(train_step)
-        val_engine = Engine(eval_step)
-        Loss(self.criterion).attach(val_engine, 'loss')
-        return train_engine, val_engine
-
-###############################################################################
-# ExperimentRunner: Optimización, entrenamiento final y evaluación
-###############################################################################
-class ExperimentRunner:
+class ECGExperimentRunner:
     def __init__(self, config: TrainingConfig):
         self.config = config
-        self.device = DeviceManager.get_device()
-        self.ecgi_dataset = ECGiDataset(config.data_path, device=self.device)
-        self._prepare_data()
+        self.device = self._setup_device()
+        self.model_factory = ModelFactory(config)
+        self.visualizer = ResultsVisualizer()
 
-    def _prepare_data(self):
-        logger.info("Iniciando preparación de datos...")
-        self.emg_tensor = self.ecgi_dataset.emg_tensor.cpu()
-        self.ecg_tensor = self.ecgi_dataset.ecg_tensor.cpu()
+        # 1) Preparamos los datos
+        self.data_loaders = self._prepare_data()
 
-        print("Tamaño de emg_tensor:", self.emg_tensor.shape)
-        print("Tamaño de ecg_tensor:", self.ecg_tensor.shape)
+        # 2) Verificamos que inputs y targets tengan la misma longitud temporal
+        self._verify_data_shapes(self.data_loaders['train'], name='train')
+        self._verify_data_shapes(self.data_loaders['val'],   name='val')
 
+        # 3) Creamos el dataset completo para CV y entrenamiento final
+        self.full_dataset = self._create_full_dataset()
+
+    def _setup_device(self) -> torch.device:
+        device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+        logger.info(f"Usando dispositivo: {device}")
+        return device
+
+    def _prepare_data(self) -> Dict[str, DataLoader]:
+        logger.info("Inicializando cargadores de datos...")
+        factory = ECGDataLoaderFactory(self.config)
+        train_loader, val_loader = factory.create_loaders()
+        # Actualizamos config basándonos en un batch de ejemplo
+        self._update_config_with_sample_data(train_loader)
+        return {'train': train_loader, 'val': val_loader}
+
+    def _update_config_with_sample_data(self, train_loader: DataLoader):
+        sample_ecg, sample_emg = next(iter(train_loader))
+        self.config.input_channels = sample_ecg.size(1)
+        self.config.output_channels = sample_emg.size(1)
+        self.config.time_steps = sample_ecg.size(2)
+        logger.debug(f"Dimensiones de entrada configuradas: {self.config.input_channels} canales, "
+                     f"{self.config.time_steps} pasos temporales")
+
+
+    def _verify_data_shapes(self,
+                            loader: DataLoader,
+                            name: str,
+                            n_batches: int = 1) -> None:
+        """
+        Verifica en los primeros `n_batches` de `loader` que:
+          - input.size(-1) == target.size(-1) == config.time_steps
+          - input.size(1) == config.input_channels
+          - target.size(1) == config.output_channels
+        Lanza ValueError en caso de mismatch.
+        """
+        for idx, (inp, tgt) in enumerate(loader):
+            t_in = inp.size(-1)
+            t_tg = tgt.size(-1)
+            c_in = inp.size(1)
+            c_tg = tgt.size(1)
+            if t_in != t_tg:
+                raise ValueError(
+                    f"[{name}] Batch {idx}: mismatch temporal "
+                    f"in={t_in} vs tgt={t_tg}"
+                )
+            if t_in != self.config.time_steps:
+                raise ValueError(
+                    f"[{name}] Batch {idx}: pasos temporales "
+                    f"esperados={self.config.time_steps}, pero got={t_in}"
+                )
+            if c_in != self.config.input_channels:
+                raise ValueError(
+                    f"[{name}] Batch {idx}: canales input "
+                    f"esperados={self.config.input_channels}, pero got={c_in}"
+                )
+            if c_tg != self.config.output_channels:
+                raise ValueError(
+                    f"[{name}] Batch {idx}: canales target "
+                    f"esperados={self.config.output_channels}, pero got={c_tg}"
+                )
+            if idx+1 >= n_batches:
+                break
+        logger.info(f"[{name}] Verificación de shapes OK en {idx+1} batch(es)")
         
-        # División secuencial: 80% entrenamiento, 20% validación
-        split_idx = int(0.8 * len(self.emg_tensor))
-        train_emg, val_emg = self.emg_tensor[:split_idx], self.emg_tensor[split_idx:]
-        train_ecg, val_ecg = self.ecg_tensor[:split_idx], self.ecg_tensor[split_idx:]
-        # imprimir dimensiones
-        print(train_emg.shape)
-        print(val_emg.shape)
-        print(train_ecg.shape)
-        print(val_ecg.shape)
 
-        self.train_dataset = TensorDataset(train_emg, train_ecg)
-        self.val_dataset = TensorDataset(val_emg, val_ecg)
-        self.train_loader = DataLoader(self.train_dataset, batch_size=self.config.batch_size, shuffle=False, pin_memory=True)
-        self.val_loader = DataLoader(self.val_dataset, batch_size=self.config.batch_size, shuffle=False, pin_memory=True)
+    def _create_full_dataset(self) -> ConcatDataset:
+        train_ds = self.data_loaders['train'].dataset
+        val_ds   = self.data_loaders['val'].dataset
+        return ConcatDataset([train_ds, val_ds])
 
-        self.input_channels = self.emg_tensor.shape[1]
-        self.output_channels = self.ecg_tensor.shape[1]
-        self.time_steps = self.emg_tensor.shape[2]
-
-        
-        logger.info("Preparación de datos completada.")
-
-    def _run_trial(self, trial: optuna.Trial, variant: str) -> float:
-        logger.info(f"Iniciando trial para variante {variant}")
-        lr = trial.suggest_float(f"lr_{variant}", 1e-4, 1e-2, log=True)
-        hp_overrides = HyperparameterOptimizer.sample_hyperparams(trial, variant)
-        model = RawCNNBase(variant=variant,
-                           time_steps=self.time_steps,
-                           input_channels=self.input_channels,
-                           output_channels=self.output_channels,
-                           **hp_overrides).to(self.device)
-        trainer = ModelTrainer(self.device)
-        optimizer = optim.Adam(model.parameters(), lr=lr)
-        train_engine, _ = trainer.create_engines(model, optimizer)
-        train_loss = []
-
-        @train_engine.on(Events.EPOCH_COMPLETED)
-        def log_epoch(engine):
-            model.eval()
-            all_preds, all_targets = [], []
-            with torch.no_grad():
-                for inputs, targets in self.val_loader:
-                    inputs = inputs.to(self.device, non_blocking=True)
-                    targets = targets.to(self.device, non_blocking=True)
-                    preds = model(inputs)
-                    all_preds.append(preds.cpu())
-                    all_targets.append(targets.cpu())
-            val_mse = F.mse_loss(torch.cat(all_preds), torch.cat(all_targets)).item()
-            # Se almacena como tupla para el trial (para Optuna) pero en entrenamiento final se usan listas de floats.
-            train_loss.append((engine.state.epoch, engine.state.output, val_mse))
-            logger.info(f"Epoch {engine.state.epoch} | Train Loss: {engine.state.output:.4f} | Val Loss: {val_mse:.4f}")
-
-        train_engine.run(self.train_loader, max_epochs=self.config.optuna_epochs)
-        logger.info("Trial finalizado.")
-        return train_loss[-1][2]
-
-    def optimize_hyperparameters(self) -> Dict[str, Any]:
-        logger.info("Iniciando la optimización de hiperparámetros...")
-        best_results = {}
-        for var in self.config.variants:
-            sampler = optuna.samplers.TPESampler(seed=42)
-            study = optuna.create_study(direction="minimize", sampler=sampler,
-                                        pruner=optuna.pruners.MedianPruner(n_startup_trials=10, n_warmup_steps=5, interval_steps=2))
-            study.optimize(lambda trial: self._run_trial(trial, var),
-                           n_trials=self.config.optuna_trials, timeout=3600)
-            best_results[var] = {'best_value': study.best_value, 'params': study.best_params}
-            logger.info(f"Mejor resultado para {var}: {best_results[var]}")
-        return best_results
-
-    def _compute_metrics(self, targets: torch.Tensor, preds: torch.Tensor) -> Dict[str, Any]:
-        comparator = ECGMetricsComparator(fs=1000)
-        comparator.set_time_domain_signals(targets, preds)
-        metrics = {
-            'MAE_mean': comparator.compute_time_mae()[0],
-            'MAE_std': comparator.compute_time_mae()[1],
-            'CC_mean': comparator.compute_time_cc()[0],
-            'CC_std': comparator.compute_time_cc()[1],
-            'MSE_mean': comparator.compute_time_mse_rmse()[0][0],
-            'MSE_std': comparator.compute_time_mse_rmse()[0][1],
-            'RMSE_mean': comparator.compute_time_mse_rmse()[1][0],
-            'RMSE_std': comparator.compute_time_mse_rmse()[1][1],
-            'SNR_mean': comparator.compute_time_snr()[0],
-            'SNR_std': comparator.compute_time_snr()[1]
+    def _compute_model_stats(self, model: torch.nn.Module) -> Dict[str, Any]:
+        stats = {
+            'num_params': sum(p.numel() for p in model.parameters() if p.requires_grad),
+            'gpu_memory_allocated_mb': torch.cuda.memory_allocated() / (1024**2),
+            'gpu_memory_reserved_mb': torch.cuda.memory_reserved() / (1024**2)
         }
-        logger.info(f"Métricas calculadas: {metrics}")
-        return metrics
+        
+        dummy = torch.randn(1, self.config.input_channels, self.config.time_steps).to(self.device)
+        
+        # Medición de latencia
+        start = time.perf_counter()
+        with torch.no_grad():
+            _ = model(dummy)
+        stats['inference_latency_ms'] = (time.perf_counter() - start) * 1000
 
-    def final_training(self, best_results: Dict[str, Any]) -> Dict[str, Any]:
-        logger.info("Iniciando el entrenamiento final...")
-        final_results = {}
-        for var in self.config.variants:
-            logger.info(f"Entrenamiento final para variante {var}")
-            lr, hp_overrides = HyperparameterOptimizer.parse_params(best_results[var]['params'], var)
-            model = RawCNNBase(variant=var,
-                                time_steps=self.time_steps,
-                                input_channels=self.input_channels,
-                                output_channels=self.output_channels,
-                                **hp_overrides).to(self.device)
-            optimizer = optim.Adam(model.parameters(), lr=lr)
-            trainer = ModelTrainer(self.device)
-            train_engine, val_engine = trainer.create_engines(model, optimizer)
-            train_timer = Timer(average=True)
-            train_timer.attach(train_engine, start=Events.EPOCH_STARTED, pause=Events.EPOCH_COMPLETED)
-            val_timer = Timer(average=True)
-            val_timer.attach(val_engine, start=Events.EPOCH_STARTED, pause=Events.EPOCH_COMPLETED)
-            # Aquí se almacenan listas de floats para las curvas de aprendizaje.
-            train_loss_history, val_loss_history = [], []
+        # Cálculo de FLOPs
+        stats.update(self._calculate_flops(model, dummy))
+        
+        logger.debug(f"Estadísticas del modelo: {stats}")
+        return stats
+
+    def _calculate_flops(self, model: torch.nn.Module, input_tensor: torch.Tensor) -> Dict[str, Any]:
+        try:
+            from thop import profile
+            flops, macs = profile(model, inputs=(input_tensor,), verbose=False)
+            return {'FLOPs': flops, 'MACs': macs}
+        except ImportError:
+            logger.warning("thop no está instalado, no se pueden calcular FLOPs/MACs")
+            return {'FLOPs': None, 'MACs': None}
+
+    def _collect_predictions(self, model: torch.nn.Module, loader: DataLoader) -> Tuple[torch.Tensor, torch.Tensor]:
+        model.eval()
+        all_preds, all_tgts = [], []
+        with torch.no_grad():
+            for batch_idx, (inp, tgt) in enumerate(loader):
+                inp = inp.to(self.device)
+                pred = model(inp).cpu()  # Mover a CPU inmediatamente
+                all_preds.append(pred)
+                all_tgts.append(tgt)
+                
+                # Liberar memoria del batch
+                del inp, pred
+                if batch_idx % 10 == 0:  # Cada 10 batches
+                    torch.cuda.empty_cache()
+                    logger.debug(f"Memoria durante inferencia: {torch.cuda.memory_allocated()/1024**2:.2f} MB")
+
+        # Liberar memoria de listas intermedias
+        torch.cuda.empty_cache()
+        return torch.cat(all_preds), torch.cat(all_tgts)
+
+    def _train_fold(self,
+                    variant: str,
+                    params: Dict[str, Any],
+                    lr: float,
+                    train_loader: DataLoader,
+                    val_loader: DataLoader
+                   ) -> Tuple[Optional[torch.nn.Module],
+                              Dict[str, float],
+                              List[float],
+                              List[float]]:
+        try:
+            model = self.model_factory.create_model(variant, params).to(self.device)
+            optimizer = torch.optim.Adam(model.parameters(), lr=lr)
+            # Usamos la firma legacy: (model, optimizer, device, criterion)
+            trainer = TrainingEngine(model, optimizer, self.device, torch.nn.MSELoss())
+            train_engine, val_engine = trainer.create_engines()
+
+            train_losses: List[float] = []
+            val_losses:   List[float] = []
 
             @train_engine.on(Events.EPOCH_COMPLETED)
             def log_epoch(engine):
-                val_engine.run(self.val_loader)
-                val_metrics = val_engine.state.metrics
-                train_loss = engine.state.output
-                val_loss = val_metrics['loss']
-                train_loss_history.append(train_loss)
-                val_loss_history.append(val_loss)
-                logger.info(f"Epoch {engine.state.epoch} | Train Loss: {train_loss:.4f} | Val Loss: {val_loss:.4f}")
+                # 1) Limpiamos caché de GPU
+                torch.cuda.empty_cache()
 
-            train_engine.run(self.train_loader, max_epochs=self.config.final_epochs)
-            if not val_loss_history:
-                logger.error(f"No se registraron métricas de validación para {var}")
-                continue
+                # 2) Sacamos el float del dict
+                train_loss = engine.state.output['loss']
+                train_losses.append(train_loss)
 
-            model.eval()
-            all_preds, all_targets = [], []
-            with torch.no_grad():
-                for inputs, targets in self.val_loader:
-                    inputs = inputs.to(self.device, non_blocking=True)
-                    targets = targets.to(self.device, non_blocking=True)
-                    preds = model(inputs)
-                    all_preds.append(preds.cpu())
-                    all_targets.append(targets.cpu())
-            final_metrics = self._compute_metrics(torch.cat(all_targets), torch.cat(all_preds))
+                # 3) Ejecutamos validación
+                val_engine.run(val_loader)
+                val_loss = val_engine.state.metrics['loss']
+                val_losses.append(val_loss)
 
-                        # --- NUEVAS MÉTRICAS DE COMPLEJIDAD COMPUTACIONAL ---
-            # Calcular el número de parámetros entrenables
-              # --- NUEVAS MÉTRICAS DE COMPLEJIDAD COMPUTACIONAL ---
-            # Calcular el número de parámetros entrenables:
-            num_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
+                # 4) Debug con floats
+                logger.debug(
+                    f"Fold {len(train_losses)} - "
+                    f"Train Loss: {train_loss:.4f}, "
+                    f"Val Loss:   {val_loss:.4f}"
+                )
 
-            # Intentar calcular FLOPs y MACs usando la librería thop
-            try:
-                from thop import profile
-                dummy_input = torch.randn(self.config.batch_size, self.input_channels, self.time_steps).to(self.device)
-                flops, macs = profile(model, inputs=(dummy_input,), verbose=False)
-                flops_str = f"{flops} FLOPs"
-                macs_str = f"{macs} MACs"
-            except ImportError:
-                logger.warning("La librería thop no está instalada. Instale thop (pip install thop) para obtener FLOPs/MACs.")
-                flops_str, macs_str = "N/A", "N/A"
+            # Entrenamos
+            train_engine.run(train_loader, max_epochs=self.config.final_epochs)
 
-            # Medir latencia de inferencia (en milisegundos)
-            import time
-            start_time = time.time()
-            with torch.no_grad():
-                _ = model(dummy_input)
-            end_time = time.time()
-            latency_ms = (end_time - start_time) * 1000
+            # Al terminar todos los epochs del fold, evaluamos métricas globales
+            metrics = self._evaluate_model(model, val_loader)
+            return model, metrics, train_losses, val_losses
 
-                        
-            final_results[var] = {
-                'model': model,
-                'Val Loss': val_loss_history[-1],
-                **final_metrics,
-                'Best Params': best_results[var]['params'],
-                'train_loss_history': train_loss_history,
-                'val_loss_history': val_loss_history,
-                'Train Time (s)': train_timer.value() * self.config.final_epochs,
-                'Val Time (s)': val_timer.value() * self.config.final_epochs,
-                'num_params': num_params,          # previamente calculado
-                'FLOPs': flops_str,                # previamente calculado o "N/A"
-                'MACs': macs_str,                  # previamente calculado o "N/A"
-                'inference_latency_ms': latency_ms, # previamente calculado
+        except Exception as e:
+            logger.error(f"Error entrenando fold: {e}")
+            return None, {}, [], []
+
+        finally:
+            # Limpieza exhaustiva
+            if 'model' in locals():
+                del model
+                logger.debug("Modelo del fold liberado de memoria")
+            if 'optimizer' in locals():
+                del optimizer
+            if 'trainer' in locals():
+                del trainer
+            torch.cuda.empty_cache()
+            logger.debug(f"Memoria GPU después de fold: "
+                         f"{torch.cuda.memory_allocated()/1024**2:.2f} MB")
+
+    def _evaluate_model(self, model: torch.nn.Module, loader: DataLoader) -> Dict[str, float]:
+        try:
+            preds, tgts = self._collect_predictions(model, loader)
+            return self.compute_all_metrics(tgts, preds)
+        except Exception as e:
+            logger.error(f"Error evaluando modelo: {str(e)}")
+            return {}
+        
+    def compute_all_metrics(self, targets: torch.Tensor, preds: torch.Tensor) -> Dict[str, float]:
+        try:
+            cmp = ECGMetricsComparator(fs=1000)
+            cmp.set_time_domain_signals(targets, preds)
+            return {
+                'MAE_mean': cmp.compute_time_mae()[0],
+                'MAE_std': cmp.compute_time_mae()[1],
+                'CC_mean': cmp.compute_time_cc()[0],
+                'CC_std': cmp.compute_time_cc()[1],
+                'MSE_mean': cmp.compute_time_mse_rmse()[0][0],
+                'MSE_std': cmp.compute_time_mse_rmse()[0][1],
+                'RMSE_mean': cmp.compute_time_mse_rmse()[1][0],
+                'RMSE_std': cmp.compute_time_mse_rmse()[1][1],
+                'SNR_mean': cmp.compute_time_snr()[0],
+                'SNR_std': cmp.compute_time_snr()[1]
             }
+        except Exception as e:
+            logger.error(f"Error calculando métricas: {str(e)}")
+            return {}
 
+    def _run_cross_validation(self, variant: str, params: Dict[str, Any], lr: float) -> Tuple[Dict[str, Any], torch.nn.Module]:
+        kf = KFold(n_splits=self.config.n_splits, shuffle=True, random_state=42)
+        fold_metrics = []
+        all_tr_losses, all_val_losses = [], []
 
-            logger.info(f"Entrenamiento final completado para {var}")
-        return final_results
+        for fold, (train_idx, val_idx) in enumerate(kf.split(self.full_dataset), 1):
+            logger.info(f"Iniciando fold {fold}/{self.config.n_splits}")
+            
+            train_sub = Subset(self.full_dataset, train_idx)
+            val_sub = Subset(self.full_dataset, val_idx)
+            train_ld = DataLoader(train_sub, batch_size=self.config.batch_size, shuffle=True)
+            val_ld = DataLoader(val_sub, batch_size=self.config.batch_size, shuffle=False)
 
-    def load_all_models(self) -> Dict[str, nn.Module]:
-        models = {}
-        for var in self.config.variants:
-            model = RawCNNBase(variant=var,
-                                time_steps=self.time_steps,
-                                input_channels=self.input_channels,
-                                output_channels=self.output_channels).to(self.device)
-            models[var] = model
-        return models
+            model, metrics, tl, vl = self._train_fold(variant, params, lr, train_ld, val_ld)
+            if model:
+                fold_metrics.append(metrics)
+                all_tr_losses.append(tl)
+                all_val_losses.append(vl)
 
-###############################################################################
-# ExperimentManager: Flujo completo del experimento y guardado organizado
-###############################################################################
-class ExperimentManager:
-    def __init__(self, config: TrainingConfig):
-        self.config = config
-        self.runner = ExperimentRunner(config)
-        # Se utiliza la carpeta "experiment_results/cnns" como base de resultados.
-        self.saver = ResultsSaver(base_dir=os.path.join(os.path.dirname(__file__), "..", "experiment_results", "cnns"))
-        # Lista para acumular las métricas de todas las variantes.
-        self.all_metrics = []
+        agg_metrics = self._aggregate_metrics(fold_metrics)
+        avg_tr_loss = np.mean(all_tr_losses, axis=0).tolist()
+        avg_val_loss = np.mean(all_val_losses, axis=0).tolist()
+        
+        final_model = self._train_final_model(variant, params, lr)
+        
+        return {**agg_metrics, 'avg_train_loss': avg_tr_loss, 'avg_val_loss': avg_val_loss}, final_model
+
+    def _train_final_model(self, variant: str, params: Dict[str, Any], lr: float) -> torch.nn.Module:
+        logger.info("Entrenando modelo final con todos los datos...")
+        full_loader = DataLoader(self.full_dataset, batch_size=self.config.batch_size, shuffle=True)
+        model = self.model_factory.create_model(variant, params).to(self.device)
+        optimizer = torch.optim.Adam(model.parameters(), lr=lr)
+        trainer = TrainingEngine(model, optimizer, self.device, torch.nn.MSELoss())
+        train_engine, _ = trainer.create_engines()
+        train_engine.run(full_loader, max_epochs=self.config.final_epochs)
+        return model
 
     def run_experiment(self):
-        logger.info("=== Iniciando el experimento completo ===")
+        """Flujo principal del experimento"""
+        logger.info("=== Inicio de experimento ECG ===")
+        self.visualizer.create_run_directory("ECG_Experiment")
 
-        # 1) Optimización de hiperparámetros
-        best_results = self.runner.optimize_hyperparameters()
-        
-        # 2) Entrenamiento final
-        final_results = self.runner.final_training(best_results)
-        
-        # 3) Para cada variante, guardar resultados y recolectar métricas
-        for variant, variant_results in final_results.items():
-            self.save_variant_outputs(variant, variant_results)
-            # Se acumulan las métricas para el CSV resumen
-            metrics_data = {
-                'Variant': variant,
-                'Val Loss': variant_results.get('Val Loss', None),
-                'Train Time (s)': variant_results.get('Train Time (s)', None),
-                'Val Time (s)': variant_results.get('Val Time (s)', None),
-                'Best Params': variant_results.get('Best Params', None),
-                'MAE_mean': variant_results.get('MAE_mean', None),
-                'MAE_std': variant_results.get('MAE_std', None),
-                'CC_mean': variant_results.get('CC_mean', None),
-                'CC_std': variant_results.get('CC_std', None),
-                'MSE_mean': variant_results.get('MSE_mean', None),
-                'MSE_std': variant_results.get('MSE_std', None),
-                'RMSE_mean': variant_results.get('RMSE_mean', None),
-                'RMSE_std': variant_results.get('RMSE_std', None),
-                'SNR_mean': variant_results.get('SNR_mean', None),
-                'SNR_std': variant_results.get('SNR_std', None),
-                'num_params': variant_results.get('num_params', None),
-                'FLOPs': variant_results.get('FLOPs', None),
-                'MACs': variant_results.get('MACs', None),
-                'gpu_memory_allocated': variant_results.get('gpu_memory_allocated', None),
-                'gpu_memory_reserved': variant_results.get('gpu_memory_reserved', None),
-                'inference_latency_ms': variant_results.get('inference_latency_ms', None),
-                'model_size_mb': variant_results.get('model_size_mb', None)  # Usar el valor almacenado en variant_results
-            }
-            self.all_metrics.append(metrics_data)
+        try:
+            # Fase 1: Optimización de hiperparámetros
+            logger.info("Fase 1: Optimización de hiperparámetros")
+            best_params = self._run_hyperparameter_optimization()
 
-        # 4) Crear DataFrame con todas las métricas de esta corrida
-        df_all = pd.DataFrame(self.all_metrics)
+            # Fase 2: Validación cruzada y entrenamiento final
+            logger.info("Fase 2: Validación cruzada y entrenamiento final")
+            for variant in self.config.variants:
+                logger.info(f"Procesando variante: {variant}")
+                vp = best_params[variant].copy()
+                lr = vp.pop(f"lr_{variant}")
+                
+                metrics, model = self._run_cross_validation(variant, vp, lr)
+                self._save_results(metrics, model, variant)
 
-        # 5) Agregar columna con el nombre de la carpeta actual (timestamp, etc.)
-        folder_name = os.path.basename(self.saver.run_dir)  
-        df_all['FolderName'] = folder_name
+            # Fase 3: Reporte final
+            logger.info("Fase 3: Generación de reporte final")
+            self.visualizer.generate_comparative_report()
 
-        # 6) Guardar CSV local (subcarpeta del experimento)
-        self.saver.save_csv(df_all, filename="all_metrics.csv")
+        except Exception as e:
+            logger.critical(f"Error crítico en el experimento: {str(e)}")
+            raise
+        finally:
+            logger.info("=== Experimento completado ===")
+            self._cleanup_resources()
 
-        # 7) Actualizar o crear Excel acumulativo en la carpeta base "cnns"
-        accumulative_xlsx_path = os.path.join(
-            os.path.dirname(self.saver.run_dir),  # la carpeta "cnns"
-            "accumulative_metrics.xlsx"
+    def _run_hyperparameter_optimization(self) -> Dict[str, Any]:
+        opt = OptunaOptimizer(
+            config=self.config,
+            data_loaders=[self.data_loaders['train'], self.data_loaders['val']],
+            model_factory=self.model_factory
         )
+        best_params = opt.optimize(self.config.variants)
+        
+        # Limpiar después de optimización
+        del opt
+        torch.cuda.empty_cache()
+        return best_params
 
-        if os.path.isfile(accumulative_xlsx_path):
-            old_df = pd.read_excel(accumulative_xlsx_path)
-            new_df = pd.concat([old_df, df_all], ignore_index=True)
-        else:
-            new_df = df_all
+    def _save_results(self, metrics: Dict[str, Any], model: torch.nn.Module, variant: str):
 
-        new_df.to_excel(accumulative_xlsx_path, index=False)
-        logger.info(f"Acumulado actualizado en Excel: {accumulative_xlsx_path}")
+                # Extraer nombre del dataset del config
+        dataset_name = os.path.basename(self.config.data_path).split('.')[0]
+        self.visualizer.dataset_name = dataset_name  # Pasar al visualizador
 
-
-        logger.info("=== Experimento completado ===")
-
-    def save_variant_outputs(self, variant: str, variant_results: Dict[str, Any]):
-        """
-        Crea una carpeta para la variante y guarda:
-          - Curva de aprendizaje
-          - Modelo (.pt)
-          - Exporta el modelo en formato ONNX y TorchScript
-          - Gráfico de la arquitectura (con HiddenLayer)
-          - Gráfico de electrodos (señales reales vs. predichas)
-        """
-        variant_dir = os.path.join(self.saver.run_dir, variant)
-        os.makedirs(variant_dir, exist_ok=True)
-        logger.info(f"Guardando resultados para la variante {variant} en {variant_dir}")
-
-        # Curva de aprendizaje
-        fig, ax = plt.subplots(figsize=(8, 6))
-        ax.plot(variant_results['train_loss_history'], label='Train Loss')
-        ax.plot(variant_results['val_loss_history'], label='Val Loss')
-        ax.set_title(f"Learning Curve - {variant}")
-        ax.set_xlabel("Epoch")
-        ax.set_ylabel("MSE Loss")
-        ax.legend()
-        fig.tight_layout()
-        learning_curve_file = os.path.join(variant_dir, "learning_curve.png")
-        fig.savefig(learning_curve_file)
-        plt.close(fig)
-
-        # Guardar modelo (.pt)
-        model_file = os.path.join(variant_dir, f"{variant}_model.pt")
-        torch.save(variant_results['model'].state_dict(), model_file)
-
-        # Calcular el tamaño del modelo en disco y almacenarlo en variant_results
-        try:
-            model_size_bytes = os.path.getsize(model_file)
-            model_size_mb = model_size_bytes / (1024 * 1024)
-            variant_results['model_size_mb'] = model_size_mb
-            logger.info(f"Tamaño del modelo en disco: {model_size_mb:.2f} MB")
-        except Exception as e:
-            logger.error(f"Error calculando el tamaño del modelo: {str(e)}")
-            variant_results['model_size_mb'] = None
-
-        # Exportar a ONNX
-        dummy_input = torch.randn(1, self.runner.input_channels, self.runner.time_steps).to(self.runner.device)
-        model = variant_results['model'].eval()
-        onnx_file = os.path.join(variant_dir, f"{variant}_model.onnx")
-        try:
-            torch.onnx.export(
-                model,
-                dummy_input, 
-                onnx_file,
-                opset_version=11,
-                do_constant_folding=True,
-                input_names=["input"],
-                output_names=["output"]
-            )
-            logger.info(f"Modelo guardado en formato ONNX: {onnx_file}")
-        except Exception as e:
-            logger.error(f"Error exportando ONNX para {variant}: {str(e)}")
-
-        # Exportar a TorchScript (tracing)  
-        ts_file = os.path.join(variant_dir, f"{variant}_model_torchscript.pt")
-        try:
-            traced_script = torch.jit.trace(model, dummy_input)
-            traced_script.save(ts_file)
-            logger.info(f"Modelo guardado en formato TorchScript: {ts_file}") 
-        except Exception as e:
-            logger.error(f"Error exportando TorchScript para {variant}: {str(e)}")
-
-        # Gráfico de electrodos: señales reales vs. predichas
-        full_dataset = torch.utils.data.TensorDataset(self.runner.emg_tensor, self.runner.ecg_tensor)
-        full_loader = torch.utils.data.DataLoader(full_dataset, batch_size=self.config.batch_size, shuffle=False)
-        variant_results['model'].eval()
-        all_preds, all_targets = [], []
-        with torch.no_grad():
-            for inputs, targets in full_loader:
-                inputs = inputs.to(self.runner.device)
-                preds = variant_results['model'](inputs)
-                all_preds.append(preds.cpu())
-                all_targets.append(targets.cpu())
-        pred_tensor = torch.cat(all_preds)
-        real_tensor = torch.cat(all_targets)
-        electrode_file = os.path.join(variant_dir, "electrode_plot.png")
-        ECGiVisualizer.plot_electrodes(
-            original_data_3d=real_tensor,
-            reconstructed_data_3d=pred_tensor,
-            fs=1000,
-            signal_label="ECG",
-            num_to_plot=real_tensor.shape[0],
-            save_path=electrode_file
+        stats = self._compute_model_stats(model)
+        preds, targets = self._collect_predictions(model, self.data_loaders['val'])
+        
+        # Mover datos a CPU antes de guardar
+        self.visualizer.save_results(
+            {**metrics, **stats}, 
+            variant, 
+            model=model.cpu(),  # Mover modelo a CPU
+            preds=preds.cpu() if preds is not None else None,
+            targets=targets.cpu() if targets is not None else None
         )
-            
-        logger.info(f"Resultados para {variant} guardados en {variant_dir}")
+        
+        # Limpieza explícita
+        del model, preds, targets
+        torch.cuda.empty_cache()
+        logger.info(f"Memoria después de guardar resultados: {torch.cuda.memory_allocated()/1024**2:.2f} MB")
+
+    def _cleanup_resources(self):
+        """Limpieza final de recursos"""
+        if torch.cuda.is_available():
+            logger.info("Liberando memoria GPU residual")
+            torch.cuda.empty_cache()
+            logger.info(f"Memoria GPU después de limpieza: {torch.cuda.memory_allocated() / 1024**2:.2f} MB")
+
+    def _aggregate_metrics(self, fold_metrics: List[Dict[str, float]]) -> Dict[str, float]:
+        """Calcula media y std de métricas a través de los folds"""
+        aggregated = {}
+        for metric in fold_metrics[0].keys():
+            values = [m[metric] for m in fold_metrics]
+            aggregated[f"{metric}_mean"] = np.mean(values)
+            aggregated[f"{metric}_std"] = np.std(values)
+        return aggregated
 
 
-###############################################################################
-# MAIN
-###############################################################################
 def main():
-    config = TrainingConfig()
-    if config.verbose:
-        logging.getLogger().setLevel(logging.INFO)
-        for handler in logging.getLogger().handlers:
-            handler.setLevel(logging.INFO)
-    else:
-        logging.getLogger().setLevel(logging.WARNING)
-        for handler in logging.getLogger().handlers:
-            handler.setLevel(logging.WARNING)
-    exp_manager = ExperimentManager(config)
-    exp_manager.run_experiment()
+    logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+    
+    try:
+        config = TrainingConfig(
+            data_path=os.path.join(os.path.dirname(__file__), "..", "data", "utah2002", "raw", "utah2002.mat"),
+            n_splits=5
+        )
+        runner = ECGExperimentRunner(config)
+        runner.run_experiment()
+    except Exception as e:
+        logger.critical(f"Error en ejecución principal: {str(e)}")
+        sys.exit(1)
+
 
 if __name__ == "__main__":
     main()

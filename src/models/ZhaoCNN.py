@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from typing import Tuple
+from typing import Optional
 
 class ZhaoCNN(nn.Module):
     """
@@ -16,18 +16,18 @@ class ZhaoCNN(nn.Module):
          produciendo una salida final de forma (B, output_channels, T).
 
     Parámetros:
-      - time_steps (int): Número de pasos temporales de la entrada (T).
+      - time_steps (int): Número de pasos temporales de la salida deseada (T). Se usará para replicar la predicción.
       - input_channels (int): Número de canales de la entrada (C) (e.g., 163 para ECG).
       - output_channels (int): Número de clases o canales de salida (e.g., 502 para EMG).
       - stage1_out (int, opcional): Número de filtros de la primera etapa (por defecto 128).
       - kernel_size_stage1 (int, opcional): Tamaño del kernel en la primera etapa (por defecto 5).
       - stage2_out (int, opcional): Número de filtros de la segunda etapa (por defecto 64).
       - kernel_size_stage2 (int, opcional): Tamaño del kernel en la segunda etapa (por defecto 3).
-      - stage3_out (int, opcional): Número de filtros de la tercera etapa (por defecto None, es decir, se usan solo dos etapas).
+      - stage3_out (Optional[int]): Número de filtros de la tercera etapa (por defecto None, es decir, se usan solo dos etapas).
       - kernel_size_stage3 (int, opcional): Tamaño del kernel en la tercera etapa (por defecto 3).
-      - pool_kernel (int, opcional): Tamaño del kernel de max pooling (por defecto 2).
+      - pool_kernel (int, opcional): Tamaño del kernel de max pooling en cada etapa (por defecto 2).
 
-    Se espera que la entrada tenga forma (B, input_channels, T) y la salida generada tenga forma (B, output_channels, T).
+    **Nota:** La capa fully connected se crea dinámicamente en el `forward` usando la forma real después del aplanado.
     """
     def __init__(self, 
                  time_steps: int, 
@@ -37,13 +37,14 @@ class ZhaoCNN(nn.Module):
                  kernel_size_stage1: int = 5,
                  stage2_out: int = 64, 
                  kernel_size_stage2: int = 3,
-                 stage3_out: int = None, 
+                 stage3_out: Optional[int] = None, 
                  kernel_size_stage3: int = 3,
                  pool_kernel: int = 2) -> None:
         super().__init__()
-        self.time_steps = time_steps
+        self.time_steps = time_steps  # Este valor se usará para replicar la predicción final
         self.output_channels = output_channels
-        
+        self.pool_kernel = pool_kernel
+
         # Etapa 1
         self.conv1 = nn.Conv1d(in_channels=input_channels,
                                out_channels=stage1_out,
@@ -76,26 +77,21 @@ class ZhaoCNN(nn.Module):
             self.final_channels = stage2_out
             self.num_stages = 2
         
-        # Calcular la longitud temporal final tras las operaciones de pooling.
-        self.final_length = time_steps // (pool_kernel ** self.num_stages)
-        
-        # Capa fully connected: mapea la representación a (output_channels).
-        # La entrada es un vector de tamaño (final_channels * final_length).
-        self.fc = nn.Linear(self.final_channels * self.final_length, output_channels)
-        
+        # La capa fully connected se creará de forma dinámica en el forward.
+        self.fc_dyn = None
+
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """
         Realiza la pasada hacia adelante.
         
-        Entrada:
-          - x: Tensor de forma (B, C, T), donde:
-              B = tamaño del batch,
-              C = número de canales de entrada,
-              T = longitud temporal.
+        Parámetros:
+          - x: Tensor de forma (B, C, T_in) donde T_in es la longitud temporal de entrada.
         
         Retorna:
-          - Tensor de forma (B, output_channels, T)
+          - Tensor de forma (B, output_channels, T_out) donde T_out = time_steps (valor fijado).
         """
+        B, C, T_in = x.shape
+
         # Etapa 1
         x = self.conv1(x)
         x = self.bn1(x)
@@ -115,12 +111,18 @@ class ZhaoCNN(nn.Module):
             x = self.relu(x)
             x = self.pool3(x)
         
-        # Aplanar la salida: (B, final_channels * final_length)
-        x = x.view(x.size(0), -1)
-        
-        # Capa fully connected: (B, final_channels * final_length) → (B, output_channels)
-        x = self.fc(x)
-        
-        # Replicar la predicción a lo largo de la dimensión temporal para obtener (B, output_channels, T)
+        # Aplanar la salida: (B, final_channels * T_after)
+        B2, final_c, T_after = x.shape
+        x = x.view(B2, -1)  # (B2, final_c * T_after)
+
+        # Verificar o crear la capa fully connected de forma dinámica
+        in_features = x.shape[1]
+        if (self.fc_dyn is None) or (self.fc_dyn.in_features != in_features):
+            self.fc_dyn = nn.Linear(in_features, self.output_channels).to(x.device)
+
+        x = self.fc_dyn(x)  # (B2, output_channels)
+
+        # Replicar la predicción a lo largo del eje temporal deseado (time_steps)
+        # De esta forma, la salida es (B2, output_channels, time_steps)
         x = x.unsqueeze(2).repeat(1, 1, self.time_steps)
         return x

@@ -1,9 +1,0 @@
-# Configuración general
-ARCHITECTURE:
-  LATENT_DIM: [32, 64, 128]
-  DROPOUT: [0.1, 0.3, 0.5, 0.7]
-  WEIGHT_INIT: "xavier"
-  NUM_CLASSES: 8
-  LABEL_EMBEDDING_DIM: 1
-
-
