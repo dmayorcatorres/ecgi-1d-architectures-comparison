@@ -1,6 +1,7 @@
 # Ignorar varios archivos con una extensión específica
 *.log
 *.pt
+*.pth
 *.mat
 *.h5
 *.npz
