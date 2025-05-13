@@ -377,18 +377,40 @@ class ECGExperimentRunner:
 
 def main():
     logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+
+    # Lista de datasets a procesar
+    datasets = [
+        "kitpvc",
+        "utah2002", 
+        "bordeaux",
+        "auckland"
+    ]
     
     try:
-        config = TrainingConfig(
-            data_path=os.path.join(os.path.dirname(__file__), "..", "data", "utah2002", "raw", "utah2002.mat"),
-            n_splits=5
-        )
-        runner = ECGExperimentRunner(config)
-        runner.run_experiment()
+        for dataset in datasets:
+            logger.info(f"=== Procesando dataset: {dataset} ===")
+            
+            config = TrainingConfig(
+                data_path=os.path.join(os.path.dirname(__file__), "..", "data", 
+                                        dataset, "raw", f"{dataset}.mat"),
+                n_splits=5
+            )
+            
+            # Configurar visualizador para acumular resultados
+            visualizer = ResultsVisualizer()
+            visualizer.output_file = "resultados_comparativos.xlsx"  # Nombre único para todos
+            
+            runner = ECGExperimentRunner(config)
+            runner.visualizer = visualizer  # Usar el mismo visualizador para todos
+            runner.run_experiment()
+            
+            # Limpiar memoria entre datasets
+            torch.cuda.empty_cache()
+            logger.info(f"=== Dataset {dataset} completado ===\n")
+   
     except Exception as e:
         logger.critical(f"Error en ejecución principal: {str(e)}")
         sys.exit(1)
-
 
 if __name__ == "__main__":
     main()

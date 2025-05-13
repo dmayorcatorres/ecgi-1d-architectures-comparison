@@ -1,0 +1,2 @@
+Run Folder,Dataset,Variant,MAE (Mean),MAE (KFold Std),MAE (Inter-electrode Std),RMSE (Mean),RMSE (KFold Std),RMSE (Inter-electrode Std),CC (Mean),CC (KFold Std),CC (Inter-electrode Std),#Parameters,FLOPs,Inference Latency (ms),Model Size (MB)
+ECG_Experiment_20250508_151722,kitpvc,densenetbilstm,,,,,,,,,,1646326,273019264.0,3.623502999971606,6.32
