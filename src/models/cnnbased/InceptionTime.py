@@ -80,7 +80,7 @@ class InceptionModule(nn.Module):
 
 class InceptionTime(nn.Module):
     def __init__(self, time_steps, input_channels, output_channels,
-                 num_filters=32, kernel_sizes=[10, 20, 40], bottleneck_channels=32,
+                 stage1_out=32, kernel_sizes=[10, 20, 40], bottleneck_channels=32,
                  use_residual=True, num_inception_modules=6):
         """
         Parámetros:
@@ -98,21 +98,21 @@ class InceptionTime(nn.Module):
         # Primer módulo: toma la entrada original.
         self.inception_modules = nn.ModuleList()
         self.inception_modules.append(
-            InceptionModule(in_channels=input_channels, nb_filters=num_filters,
+            InceptionModule(in_channels=input_channels, nb_filters=stage1_out,
                             kernel_sizes=kernel_sizes, bottleneck_channels=bottleneck_channels,
                             use_residual=use_residual)
         )
         # Los módulos posteriores toman la salida del anterior.
         for _ in range(1, num_inception_modules):
-            in_ch = num_filters * (len(kernel_sizes) + 1)
+            in_ch = stage1_out * (len(kernel_sizes) + 1)
             self.inception_modules.append(
-                InceptionModule(in_channels=in_ch, nb_filters=num_filters,
+                InceptionModule(in_channels=in_ch, nb_filters=stage1_out,
                                 kernel_sizes=kernel_sizes, bottleneck_channels=bottleneck_channels,
                                 use_residual=use_residual)
             )
         
         # Capa final para mapear a output_channels.
-        final_in_channels = num_filters * (len(kernel_sizes) + 1)
+        final_in_channels = stage1_out * (len(kernel_sizes) + 1)
         self.final_conv = nn.Conv1d(in_channels=final_in_channels, out_channels=output_channels,
                                     kernel_size=1, bias=False)
     

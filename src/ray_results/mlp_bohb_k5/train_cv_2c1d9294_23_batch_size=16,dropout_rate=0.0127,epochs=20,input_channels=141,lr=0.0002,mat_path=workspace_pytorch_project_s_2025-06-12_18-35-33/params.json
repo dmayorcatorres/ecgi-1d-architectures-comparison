@@ -1,0 +1,15 @@
+{
+  "batch_size": 16,
+  "dropout_rate": 0.012709563372047594,
+  "epochs": 20,
+  "input_channels": 141,
+  "lr": 0.00016435497475111326,
+  "mat_path": "/workspace/pytorch_project/src/data/auckland/raw/auckland.mat",
+  "output_channels": 221,
+  "stage1_out": 192,
+  "stage2_out": 128,
+  "stage3_out": 48,
+  "time_steps": 256,
+  "variant": "mlp",
+  "weight_decay": 2.6675383361699188e-05
+}

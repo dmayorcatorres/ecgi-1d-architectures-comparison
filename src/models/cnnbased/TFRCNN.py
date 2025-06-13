@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from typing import Union
-from src.models.base.ResidualBlock import ResBlock3x
+from .ResidualBlock import ResBlock3x
 
 class TFRCNN(nn.Module):
     """

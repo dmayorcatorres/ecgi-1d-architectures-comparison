@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from typing import Optional
-from src.models.base.ConvSEBlock import ConvSEBlock
+from .ConvSEBlock import ConvSEBlock
 
 class CNN_LSTM(nn.Module):
     def __init__(self,

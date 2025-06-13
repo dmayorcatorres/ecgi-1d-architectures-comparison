@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from typing import Optional
-from src.models.SqueezeExciteBlock import SqueezeExciteBlock
+from src.models.base.SqueezeExciteBlock import SqueezeExciteBlock
 
 class ConvSEBlock(nn.Module):
     """

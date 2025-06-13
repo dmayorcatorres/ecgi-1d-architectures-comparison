@@ -26,41 +26,41 @@ class DilatedCNN(nn.Module):
         time_steps: int, 
         input_channels: int, 
         output_channels: int, 
-        num_filters: int = 32,  # Número de filtros para las capas 2D
+        stage1_out: int = 32,  # Número de filtros para las capas 2D
         fc_units: int = 256      # Unidades de la capa fully connected
     ):
         super().__init__()
         self.time_steps = time_steps
         self.input_channels = input_channels  # Se utiliza como "altura" para las convoluciones 2D
         self.output_channels = output_channels
-        self.num_filters = num_filters
+        self.stage1_out = stage1_out
         
         # Capas convolucionales 2D con dilatación y stride.
         # Se espera que la entrada a estas capas tenga forma (B, 1, input_channels, time_steps).
         self.dl1 = nn.Conv2d(
             in_channels=1,
-            out_channels=num_filters,
+            out_channels=stage1_out,
             kernel_size=(3, 3),
             dilation=(1, 2),
             padding=(1, 2)
         )
         self.sl1 = nn.Conv2d(
-            in_channels=num_filters,
-            out_channels=num_filters,
+            in_channels=stage1_out,
+            out_channels=stage1_out,
             kernel_size=(1, 4),
             stride=(1, 4),
             padding=(0, 1)
         )
         self.dl2 = nn.Conv2d(
-            in_channels=num_filters,
-            out_channels=num_filters,
+            in_channels=stage1_out,
+            out_channels=stage1_out,
             kernel_size=(3, 3),
             dilation=(1, 2),
             padding=(1, 2)
         )
         self.sl2 = nn.Conv2d(
-            in_channels=num_filters,
-            out_channels=num_filters,
+            in_channels=stage1_out,
+            out_channels=stage1_out,
             kernel_size=(1, 2),
             stride=(1, 2),
             padding=(0, 0)
@@ -68,13 +68,13 @@ class DilatedCNN(nn.Module):
         
         # Pooling adaptativo: reduce la dimensión del ancho (tiempo) a 1,
         # manteniendo la "altura" igual a input_channels.
-        # Salida: (B, num_filters, input_channels, 1)
+        # Salida: (B, stage1_out, input_channels, 1)
         self.adaptive_pool = nn.AdaptiveAvgPool2d((input_channels, 1))
         
         # Capa fully connected: mapea la representación a (output_channels * time_steps).
-        # La entrada es un vector de tamaño (num_filters * input_channels)
+        # La entrada es un vector de tamaño (stage1_out * input_channels)
         self.fc = nn.Sequential(
-            nn.Linear(num_filters * input_channels, fc_units),
+            nn.Linear(stage1_out * input_channels, fc_units),
             nn.ReLU(),
             nn.Linear(fc_units, output_channels * time_steps)
         )
@@ -104,10 +104,10 @@ class DilatedCNN(nn.Module):
         out = F.relu(self.sl2(out))
         
         # Pooling adaptativo: reduce la dimensión temporal (ancho) a 1, manteniendo la altura
-        # Resultado: (B, num_filters, input_channels, 1)
+        # Resultado: (B, stage1_out, input_channels, 1)
         out = self.adaptive_pool(out)
         
-        # Aplanar la salida: (B, num_filters * input_channels)
+        # Aplanar la salida: (B, stage1_out * input_channels)
         out = out.view(B, -1)
         
         # Proyección final a (B, output_channels * time_steps)

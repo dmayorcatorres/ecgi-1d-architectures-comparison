@@ -11,7 +11,7 @@ from src.models.cnnbased.LITE import LITE
 from src.models.cnnbased.MLP import MLP
 from src.models.cnnbased.MultiChannelDCNN import MultiChannelDCNN
 from src.models.cnnbased.MultiScaleCNN import MultiScaleCNN
-from src.models.cnnbased.OSCNN import OSCNN
+#from src.models.cnnbased.OSCNN import OSCNN
 from src.models.cnnbased.ResNet import ResNet
 from src.models.cnnbased.ResNetCNN import ResNetCNN
 from src.models.cnnbased.TCN1D import TCN1D
@@ -23,7 +23,7 @@ from src.models.cnnbased.ZhaoCNN import ZhaoCNN
 # RNN based Models
 from src.models.rnnbased.TLGRUNet import TLGRUNet
 from src.models.rnnbased.VSGRUNet import VSGRUNet
-from src.models.DeepResidualBiLSTM import DeepResidualBiLSTM
+from src.models.hybridbased.DeepResidualBiLSTM import DeepResidualBiLSTM
 from src.models.rnnbased.RNN_GRU import RNN_GRU
 from src.models.rnnbased.RNN_LSTM import RNN_LSTM
 from src.models.rnnbased.PeepholeLSTM import PeepholeLSTM
@@ -42,7 +42,15 @@ from src.models.hybridbased.CNN_BILSTM_BIGRU_Dilated import CNN_BILSTM_BIGRU_Dil
 from src.models.hybridbased.DisjointLSTM import DisjointLSTM
 
 # Attention based models
-from src.models.atbased.CNN_ALSTM import CNN_ALSTM
+from src.models.atbased.ALSTM import ALSTM
+from src.models.atbased.Transformer1D import Transformer1D
+from src.models.atbased.Informer1D import Informer1D
+from src.models.atbased.Autoformer1D import Autoformer1D
+from src.models.atbased.PatchTST import PatchTST
+from src.models.atbased.ViT1D import ViT1D
+from src.models.atbased.TimeNet1D import TimeNet1D
+
+#from src.models.atbased.BERT_BIGRU  import BERT_BIGRU
 
 class ModelFactory:
     def __init__(self, config):
@@ -70,7 +78,7 @@ class ModelFactory:
             "mlp": MLP,
             "multichanneldcnn": MultiChannelDCNN,
             "multiscalecnn": MultiScaleCNN,
-            "oscnn": OSCNN,
+#            "oscnn": OSCNN,
             "resnet": ResNet,
             "resnetcnn": ResNetCNN,
             "tcn": TCN1D,
@@ -80,31 +88,35 @@ class ModelFactory:
             #"efficientnet1d": EfficientNet1D,
 
             # RNN-based
-            "rnn_gru": RNN_GRU,
-            "rnn_lstm": RNN_LSTM,
-            "peepholelstm": PeepholeLSTM,
-            "phasedlstm": PhasedLSTM,
-            "indrnn": IndRNN,
-            "qrnn":  QRNN,
+            
+            #"phasedlstm": PhasedLSTM,
             "esn":   ESN,
-            "deepresidualbilstm": DeepResidualBiLSTM,
+            "indrnn": IndRNN,
+            "peepholelstm": PeepholeLSTM,
+            "qrnn":  QRNN,
             "tlgru": TLGRUNet,
             "vsgrunet": VSGRUNet,
+            "rnn_gru": RNN_GRU,
+            "rnn_lstm": RNN_LSTM,
             
             # Hybrid
-            "cnnbilstmbigrudil": CNN_BILSTM_BIGRU_Dilated,
+            "deepresidualbilstm": DeepResidualBiLSTM,
+            "cnnlstm": CNN_LSTM,
             "cnngru": CNN_GRU,
             "cnnlstmgru": CNN_LSTM_GRU,
-            "cnnlstm": CNN_LSTM,
             "disjointlstm": DisjointLSTM,
-            "lstm_fcn": LSTM_FCN,
-            
+            "lstmfcn": LSTM_FCN,
+            "cnnbilstmbigrudil": CNN_BILSTM_BIGRU_Dilated,
+
+            # Attention based
+            "alstm": ALSTM,
+            "transformer1d": Transformer1D,
+            "informer1d": Informer1D,
+            "autoformer1d": Autoformer1D,
+            "patchtst": PatchTST,
+            "vit1d": ViT1D,
+            "timenet1d": TimeNet1D,
 
 
 
         }[variant]
-
-class HyperparameterOptimizer:
-    @staticmethod
-    def sample_parameters(trial: optuna.Trial, variant: str) -> dict:
-        return hyperparameter_space[variant](trial)

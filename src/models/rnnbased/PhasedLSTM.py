@@ -82,25 +82,24 @@ class PhasedLSTMCell(nn.Module):
 
 
 class PhasedLSTM(nn.Module):
-    """
-    Wrapper para procesar secuencia completa con timestamps:
-      input x: (B, C, T), times: (B, T)
-    output: (B, hidden_size, T)
-    """
     def __init__(self,
                  time_steps: int,
                  input_channels: int,
                  output_channels: int,
                  hidden_size: int = 64,
-                 num_layers: int = 1):
+                 num_layers: int = 1,
+                 period_init: float = 1.0,    # Nuevo parámetro
+                 r_on_init: float = 0.05):    # Nuevo parámetro
         super().__init__()
         self.hidden_size = hidden_size
-        self.num_layers  = num_layers
+        self.num_layers = num_layers
 
         self.cells = nn.ModuleList([
             PhasedLSTMCell(
                 input_channels if l == 0 else hidden_size,
-                hidden_size
+                hidden_size,
+                period_init=period_init,  # Pasa los hiperparámetros a la célula
+                r_on_init=r_on_init
             )
             for l in range(num_layers)
         ])

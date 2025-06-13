@@ -1,2 +1,0 @@
-Run Folder,Dataset,Variant,MAE (Mean),MAE (KFold Std),MAE (Inter-electrode Std),RMSE (Mean),RMSE (KFold Std),RMSE (Inter-electrode Std),CC (Mean),CC (KFold Std),CC (Inter-electrode Std),#Parameters,FLOPs,Inference Latency (ms),Model Size (MB)
-ECG_Experiment_20250428_101945,utah2002,multichanneldcnn,,,,,,,,,,7373719,1467740160.0,34.052414001052966,28.13

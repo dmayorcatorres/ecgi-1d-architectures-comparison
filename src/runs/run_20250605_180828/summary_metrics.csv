@@ -1,0 +1,2 @@
+Run Folder,Dataset,Variant,MAE_mean,MAE_std,RMSE_mean,RMSE_std,MSE_mean,MSE_std,CC_mean,CC_std,MAE_inter_std,RMSE_inter_std,MSE_inter_std,CC_inter_std,num_params,FLOPs,inference_latency_ms,Model Size (MB),Best Trial
+run_20250605_180828,auckland,patchtst,,,,,,,,,,,,,1052008,56028672.0,1.2893230000372569,4.02,"patch_len=8, stride=4, d_model=192, num_heads=2, num_layers=1, dropout=0.5, lr_patchtst=0.0011123676891199089, Best Trial=patch_len=8, stride=4, d_model=192, num_heads=2, num_layers=1, dropout=0.5, lr_patchtst=0.0011123676891199089"

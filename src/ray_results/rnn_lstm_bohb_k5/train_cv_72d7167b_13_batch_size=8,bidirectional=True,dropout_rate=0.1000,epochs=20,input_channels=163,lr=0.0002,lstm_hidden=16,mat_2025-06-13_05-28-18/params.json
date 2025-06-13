@@ -1,0 +1,15 @@
+{
+  "batch_size": 8,
+  "bidirectional": true,
+  "dropout_rate": 0.1,
+  "epochs": 20,
+  "input_channels": 163,
+  "lr": 0.00021405919019849056,
+  "lstm_hidden": 16,
+  "mat_path": "/workspace/pytorch_project/src/data/kitpvc/raw/kitpvc.mat",
+  "num_layers": 3,
+  "output_channels": 502,
+  "time_steps": 256,
+  "variant": "rnn_lstm",
+  "weight_decay": 1.8629639119246215e-05
+}

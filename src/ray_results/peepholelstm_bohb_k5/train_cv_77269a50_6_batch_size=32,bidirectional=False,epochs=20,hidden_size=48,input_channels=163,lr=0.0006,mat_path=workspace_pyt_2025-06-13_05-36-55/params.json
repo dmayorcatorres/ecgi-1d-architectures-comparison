@@ -1,0 +1,14 @@
+{
+  "batch_size": 32,
+  "bidirectional": false,
+  "epochs": 20,
+  "hidden_size": 48,
+  "input_channels": 163,
+  "lr": 0.0005820013372709853,
+  "mat_path": "/workspace/pytorch_project/src/data/kitpvc/raw/kitpvc.mat",
+  "num_layers": 1,
+  "output_channels": 502,
+  "time_steps": 256,
+  "variant": "peepholelstm",
+  "weight_decay": 1.3783237455007196e-06
+}

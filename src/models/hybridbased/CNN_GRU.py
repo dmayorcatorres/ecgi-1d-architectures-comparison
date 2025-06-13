@@ -1,6 +1,6 @@
 import torch
 import torch.nn as nn
-from src.models.base.ConvSEBlock import ConvSEBlock
+from .ConvSEBlock import ConvSEBlock
 
 class CNN_GRU(nn.Module):
     def __init__(self,

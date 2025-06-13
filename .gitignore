@@ -7,3 +7,5 @@
 *.npz
 *.npy
 *.png
+*.pyc
+*.json

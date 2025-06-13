@@ -1,0 +1,15 @@
+Failure # 1 (occurred at 2025-06-12_14-02-27)
+[36mray::ImplicitFunc.train()[39m (pid=654198, ip=172.17.0.2, actor_id=8ef0460bc1d2adff6de3b05001000000, repr=train_cv)
+  File "/opt/conda/lib/python3.10/site-packages/ray/tune/trainable/trainable.py", line 342, in train
+    raise skipped from exception_cause(skipped)
+  File "/opt/conda/lib/python3.10/site-packages/ray/air/_internal/util.py", line 88, in run
+    self._ret = self._target(*self._args, **self._kwargs)
+  File "/opt/conda/lib/python3.10/site-packages/ray/tune/trainable/function_trainable.py", line 115, in <lambda>
+    training_func=lambda: self._trainable_func(self.config),
+  File "/opt/conda/lib/python3.10/site-packages/ray/tune/trainable/function_trainable.py", line 332, in _trainable_func
+    output = fn()
+  File "/workspace/pytorch_project/src/run_trials2.py", line 231, in train_cv
+    train.report({"val_loss": mean_loss}, step=epoch)
+  File "/opt/conda/lib/python3.10/site-packages/ray/train/_internal/session.py", line 644, in wrapper
+    return fn(*args, **kwargs)
+TypeError: report() got an unexpected keyword argument 'step'

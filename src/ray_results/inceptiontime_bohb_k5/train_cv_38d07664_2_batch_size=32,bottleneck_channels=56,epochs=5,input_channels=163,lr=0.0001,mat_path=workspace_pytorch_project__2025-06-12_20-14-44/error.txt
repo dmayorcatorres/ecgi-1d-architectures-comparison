@@ -1,0 +1,27 @@
+Failure # 1 (occurred at 2025-06-12_20-14-51)
+[36mray::ImplicitFunc.train()[39m (pid=780078, ip=172.17.0.2, actor_id=5c7ca5937d7e31f21a729b5101000000, repr=train_cv)
+  File "/opt/conda/lib/python3.10/site-packages/ray/tune/trainable/trainable.py", line 342, in train
+    raise skipped from exception_cause(skipped)
+  File "/opt/conda/lib/python3.10/site-packages/ray/air/_internal/util.py", line 88, in run
+    self._ret = self._target(*self._args, **self._kwargs)
+  File "/opt/conda/lib/python3.10/site-packages/ray/tune/trainable/function_trainable.py", line 115, in <lambda>
+    training_func=lambda: self._trainable_func(self.config),
+  File "/opt/conda/lib/python3.10/site-packages/ray/tune/trainable/function_trainable.py", line 332, in _trainable_func
+    output = fn()
+  File "/workspace/pytorch_project/src/run_trials2.py", line 300, in train_cv
+    model  = factory.create(cfg["variant"], params).to(DEVICE)
+  File "/opt/conda/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1174, in to
+    return self._apply(convert)
+  File "/opt/conda/lib/python3.10/site-packages/torch/nn/modules/module.py", line 780, in _apply
+    module._apply(fn)
+  File "/opt/conda/lib/python3.10/site-packages/torch/nn/modules/module.py", line 780, in _apply
+    module._apply(fn)
+  File "/opt/conda/lib/python3.10/site-packages/torch/nn/modules/module.py", line 780, in _apply
+    module._apply(fn)
+  File "/opt/conda/lib/python3.10/site-packages/torch/nn/modules/module.py", line 805, in _apply
+    param_applied = fn(param)
+  File "/opt/conda/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1160, in convert
+    return t.to(
+  File "/opt/conda/lib/python3.10/site-packages/torch/cuda/__init__.py", line 314, in _lazy_init
+    torch._C._cuda_init()
+RuntimeError: CUDA unknown error - this may be due to an incorrectly set up environment, e.g. changing env variable CUDA_VISIBLE_DEVICES after program start. Setting the available devices to be zero.

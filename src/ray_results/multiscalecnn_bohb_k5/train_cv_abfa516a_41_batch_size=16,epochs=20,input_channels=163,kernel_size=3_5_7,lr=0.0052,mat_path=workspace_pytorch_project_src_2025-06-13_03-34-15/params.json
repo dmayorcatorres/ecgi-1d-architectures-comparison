@@ -1,0 +1,19 @@
+{
+  "batch_size": 16,
+  "epochs": 20,
+  "input_channels": 163,
+  "kernel_size": [
+    3,
+    5,
+    7
+  ],
+  "lr": 0.00519256720991972,
+  "mat_path": "/workspace/pytorch_project/src/data/kitpvc/raw/kitpvc.mat",
+  "output_channels": 502,
+  "stage1_out": 160,
+  "stage2_out": 32,
+  "stage3_out": 128,
+  "time_steps": 256,
+  "variant": "multiscalecnn",
+  "weight_decay": 0.000650641607989728
+}

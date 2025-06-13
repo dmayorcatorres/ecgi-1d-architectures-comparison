@@ -1,0 +1,15 @@
+{
+  "batch_size": 16,
+  "bottleneck_channels": 40,
+  "epochs": 5,
+  "input_channels": 163,
+  "lr": 0.008706020878304856,
+  "mat_path": "/workspace/pytorch_project/src/data/kitpvc/raw/kitpvc.mat",
+  "num_inception_modules": 4,
+  "output_channels": 502,
+  "stage1_out": 192,
+  "time_steps": 256,
+  "use_residual": false,
+  "variant": "inceptiontime",
+  "weight_decay": 1.0053940194693026e-06
+}

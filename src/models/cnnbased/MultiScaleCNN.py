@@ -9,20 +9,15 @@ class MultiScaleCNN(nn.Module):
     Multi‑Scale CNN para series temporales (B × C_in × T).
     """
 
-    def __init__(
-        self,
+    def __init__(self, time_steps   : int,
         input_channels : int,
         output_channels: int,
-        # ← NUEVO: se puede pasar branch_filters=(f1,f2,f3)  **o**
-        #           los tres argumentos stage{1,2,3}_out
         branch_filters : Tuple[int, int, int] | None = None,
-        *,
         stage1_out: int | None = None,
         stage2_out: int | None = None,
         stage3_out: int | None = None,
-        kernel_sizes : Sequence[int] = (3, 5, 7),
+        kernel_size : Sequence[int] = (3, 5, 7),
         activation   : str | None    = "relu",
-        time_steps   : int | None    = None,
     ) -> None:
         super().__init__()
 
@@ -38,8 +33,8 @@ class MultiScaleCNN(nn.Module):
                 )
             branch_filters = (stage1_out, stage2_out, stage3_out)
 
-        if len(branch_filters) != len(kernel_sizes):
-            raise ValueError("branch_filters y kernel_sizes deben tener la misma longitud")
+        if len(branch_filters) != len(kernel_size):
+            raise ValueError("branch_filters y kernel_size deben tener la misma longitud")
 
         self.time_steps = time_steps
         self.act_fn = getattr(F, activation, F.relu)
@@ -54,7 +49,7 @@ class MultiScaleCNN(nn.Module):
                 kernel_size  = k,
                 padding      = k // 2
             )
-            for k, n_filters in zip(kernel_sizes, branch_filters)
+            for k, n_filters in zip(kernel_size, branch_filters)
         )
 
         self.total_filters = sum(branch_filters)

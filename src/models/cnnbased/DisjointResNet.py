@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from src.models.DisjointBase import DisjointBase
+from .DisjointBase import DisjointBase
 
 class ResidualDisjointBlock(nn.Module):
     def __init__(self, in_channels: int, out_channels: int, temporal_kernel: int):
@@ -31,7 +31,7 @@ class ResidualDisjointBlock(nn.Module):
 
 
 class DisjointResNet(nn.Module):
-    def __init__(self, time_steps: int, input_channels: int, output_channels: int, n_feature_maps: int = 32):
+    def __init__(self, time_steps: int, input_channels: int, output_channels: int, stage1_out: int = 32):
         """
         DisjointResNet para reconstrucción (o clasificación) que utiliza la base DisjointBase
         para construir bloques residuales de forma modular.
@@ -40,7 +40,7 @@ class DisjointResNet(nn.Module):
           - time_steps: longitud temporal de la serie.
           - input_channels: número de canales de entrada (p.ej., sensores ECG).
           - output_channels: número de canales de salida.
-          - n_feature_maps: número de filtros base para los bloques residuales.
+          - stage1_out: número de filtros base para los bloques residuales.
         """
         super().__init__()
         self.time_steps = time_steps
@@ -49,18 +49,18 @@ class DisjointResNet(nn.Module):
         
         # Bloque inicial: extrae características básicas usando DisjointBase.
         self.initial_block = DisjointBase(in_height=input_channels, 
-                                          out_filters=n_feature_maps, 
+                                          out_filters=stage1_out, 
                                           temporal_kernel=8)
         
         # Secuencia de bloques residuales sencillos.
         # Aquí se utilizan, por ejemplo, dos bloques residuales con kernel temporal 5.
         self.res_blocks = nn.Sequential(
-            ResidualDisjointBlock(in_channels=n_feature_maps, out_channels=n_feature_maps, temporal_kernel=5),
-            ResidualDisjointBlock(in_channels=n_feature_maps, out_channels=n_feature_maps, temporal_kernel=5)
+            ResidualDisjointBlock(in_channels=stage1_out, out_channels=stage1_out, temporal_kernel=5),
+            ResidualDisjointBlock(in_channels=stage1_out, out_channels=stage1_out, temporal_kernel=5)
         )
         
         # Capa final: se proyecta la salida al número de canales deseado sin alterar la longitud temporal.
-        self.final_conv = nn.Conv1d(n_feature_maps, output_channels, kernel_size=1)
+        self.final_conv = nn.Conv1d(stage1_out, output_channels, kernel_size=1)
         
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """
@@ -69,7 +69,7 @@ class DisjointResNet(nn.Module):
         Salida:
           - Tensor de forma (B, output_channels, time_steps)
         """
-        out = self.initial_block(x)    # (B, n_feature_maps, T)
-        out = self.res_blocks(out)     # (B, n_feature_maps, T)
+        out = self.initial_block(x)    # (B, stage1_out, T)
+        out = self.res_blocks(out)     # (B, stage1_out, T)
         out = self.final_conv(out)     # (B, output_channels, T)
         return out

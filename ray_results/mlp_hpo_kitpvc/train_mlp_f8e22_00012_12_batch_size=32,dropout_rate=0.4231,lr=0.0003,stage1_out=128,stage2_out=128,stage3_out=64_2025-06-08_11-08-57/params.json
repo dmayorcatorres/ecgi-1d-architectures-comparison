@@ -1,0 +1,13 @@
+{
+  "batch_size": 32,
+  "dropout_rate": 0.4231386340683717,
+  "epochs": 10,
+  "input_channels": 163,
+  "lr": 0.00033664443525131,
+  "mat_path": "/workspace/pytorch_project/data/kitpvc/raw/kitpvc.mat",
+  "output_channels": 502,
+  "stage1_out": 128,
+  "stage2_out": 128,
+  "stage3_out": 64,
+  "time_steps": 256
+}

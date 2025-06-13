@@ -13,7 +13,7 @@ class MLP(nn.Module):
       - stage1_out (int): Neuronas primera capa oculta (default=500)
       - stage2_out (int): Neuronas segunda capa oculta (default=500)
       - stage3_out (int): Neuronas tercera capa oculta (default=500)
-      - dropout_rates (list): Tasas de dropout [input, hidden1, hidden2, output]
+      - dropout_rate (list): Tasas de dropout [input, hidden1, hidden2, output]
     """
     
     def __init__(self, 
@@ -23,7 +23,7 @@ class MLP(nn.Module):
                  stage1_out: int = 128,
                  stage2_out: int = 128,
                  stage3_out: int = 128,
-                 dropout_rates: list = [0.1, 0.2, 0.2, 0.3]):
+                 dropout_rate: float = 0.2):
         
         super().__init__()
         self.time_steps = time_steps
@@ -34,22 +34,22 @@ class MLP(nn.Module):
         
         self.layers = nn.Sequential(
             # Capa entrada -> stage1
-            nn.Dropout(dropout_rates[0]),
+            nn.Dropout(dropout_rate),
             nn.Linear(input_channels * time_steps, stage1_out),
             nn.ReLU(),
             
             # stage1 -> stage2
-            nn.Dropout(dropout_rates[1]),
+            nn.Dropout(dropout_rate),
             nn.Linear(stage1_out, stage2_out),
             nn.ReLU(),
             
             # stage2 -> stage3
-            nn.Dropout(dropout_rates[2]),
+            nn.Dropout(dropout_rate),
             nn.Linear(stage2_out, stage3_out),
             nn.ReLU(),
             
             # stage3 -> salida
-            nn.Dropout(dropout_rates[3]),
+            nn.Dropout(dropout_rate),
             nn.Linear(stage3_out, output_channels * time_steps)
         )
 
