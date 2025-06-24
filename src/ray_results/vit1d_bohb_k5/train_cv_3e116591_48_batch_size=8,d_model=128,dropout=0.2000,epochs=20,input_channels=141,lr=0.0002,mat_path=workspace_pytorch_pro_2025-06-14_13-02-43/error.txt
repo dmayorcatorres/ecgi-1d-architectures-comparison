@@ -1,0 +1,17 @@
+Failure # 1 (occurred at 2025-06-14_13-02-51)
+[36mray::ImplicitFunc.train()[39m (pid=737757, ip=172.17.0.2, actor_id=ea18d28ab68ba97bbb770f6701000000, repr=train_cv)
+  File "/opt/conda/lib/python3.10/site-packages/ray/tune/trainable/trainable.py", line 342, in train
+    raise skipped from exception_cause(skipped)
+  File "/opt/conda/lib/python3.10/site-packages/ray/air/_internal/util.py", line 88, in run
+    self._ret = self._target(*self._args, **self._kwargs)
+  File "/opt/conda/lib/python3.10/site-packages/ray/tune/trainable/function_trainable.py", line 115, in <lambda>
+    training_func=lambda: self._trainable_func(self.config),
+  File "/opt/conda/lib/python3.10/site-packages/ray/tune/trainable/function_trainable.py", line 332, in _trainable_func
+    output = fn()
+  File "/workspace/pytorch_project/src/run_trials2.py", line 300, in train_cv
+    model  = factory.create(cfg["variant"], params).to(DEVICE)
+  File "/workspace/pytorch_project/src/models/factory.py", line 26, in create
+    return cls(**filtered)
+  File "/workspace/pytorch_project/src/models/atbased/ViT1D.py", line 43, in __init__
+    assert time_steps % patch_size == 0, "El número de pasos temporales debe ser divisible por el tamaño de patch"
+AssertionError: El número de pasos temporales debe ser divisible por el tamaño de patch

@@ -1,0 +1,33 @@
+Failure # 1 (occurred at 2025-06-15_01-07-22)
+[36mray::ImplicitFunc.train()[39m (pid=15527, ip=172.17.0.2, actor_id=ad87bcb0fbc4434d52e0bfa401000000, repr=train_cv)
+  File "/opt/conda/lib/python3.10/site-packages/ray/tune/trainable/trainable.py", line 342, in train
+    raise skipped from exception_cause(skipped)
+  File "/opt/conda/lib/python3.10/site-packages/ray/air/_internal/util.py", line 88, in run
+    self._ret = self._target(*self._args, **self._kwargs)
+  File "/opt/conda/lib/python3.10/site-packages/ray/tune/trainable/function_trainable.py", line 115, in <lambda>
+    training_func=lambda: self._trainable_func(self.config),
+  File "/opt/conda/lib/python3.10/site-packages/ray/tune/trainable/function_trainable.py", line 332, in _trainable_func
+    output = fn()
+  File "/workspace/pytorch_project/src/run_trials2.py", line 312, in train_cv
+    loss = loss_fn(model(xb), yb)
+  File "/opt/conda/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1553, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+  File "/opt/conda/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1562, in _call_impl
+    return forward_call(*args, **kwargs)
+  File "/workspace/pytorch_project/src/models/cnnbased/DisjointCNN.py", line 58, in forward
+    x = self.stage4(x)  # Salida: (B, stage1_out, T)
+  File "/opt/conda/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1553, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+  File "/opt/conda/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1562, in _call_impl
+    return forward_call(*args, **kwargs)
+  File "/workspace/pytorch_project/src/models/cnnbased/DisjointBase.py", line 67, in forward
+    x = self.temp_act(x)
+  File "/opt/conda/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1553, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+  File "/opt/conda/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1562, in _call_impl
+    return forward_call(*args, **kwargs)
+  File "/opt/conda/lib/python3.10/site-packages/torch/nn/modules/activation.py", line 532, in forward
+    return F.elu(input, self.alpha, self.inplace)
+  File "/opt/conda/lib/python3.10/site-packages/torch/nn/functional.py", line 1593, in elu
+    result = torch._C._nn.elu(input, alpha)
+torch.OutOfMemoryError: CUDA out of memory. Tried to allocate 288.00 MiB. GPU 0 has a total capacity of 3.63 GiB of which 211.81 MiB is free. Process 1460202 has 54.00 MiB memory in use. Process 1550996 has 3.36 GiB memory in use. Of the allocated memory 3.27 GiB is allocated by PyTorch, and 25.94 MiB is reserved by PyTorch but unallocated. If reserved but unallocated memory is large try setting PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True to avoid fragmentation.  See documentation for Memory Management  (https://pytorch.org/docs/stable/notes/cuda.html#environment-variables)

@@ -4,7 +4,7 @@ set -euo pipefail
 
 # Configuración
 PYTHON_CMD="python run_trials2.py"
-DATASETS=(kitpvc auckland bordeux utah2002)
+DATASETS=(bordeux1)
 METHODS=(
   dilatedcnn disjointcnn disjointresnet fcn inceptiontime lite mlp
   multichanneldcnn multiscalecnn resnet resnetcnn tcn tfrcnn zhaocnn
