@@ -11,3 +11,5 @@
 *.json
 *.pkl
 *.csv
+src/ray_results/
+src/batch_logs/
