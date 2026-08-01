@@ -90,12 +90,65 @@ adicionales:
    Re-verificado antes de eliminar que ningún módulo activo los importa.
    Verificado después: `pytest` 29/29 en verde, `run_bohb.py` importa sin
    errores. Recuperables con `git revert` si el equipo los necesita.
-3. **Externalización de variantes de configuración** — ver detalle más
-   abajo si se ejecutó en esta misma sesión.
+3. **Externalización de configuración** — commit `bb42ebe6`:
+   `TrainingConfig.variants` (`src/configs/base_config.py`) pasó de
+   tuplas comentadas a mano a `field(default_factory=...)` leyendo
+   `configs/training/default.yaml::active_default_variants`, con
+   fallback hardcodeado verificado idéntico al valor histórico.
+   `run_bohb.py` no fue tocado (no consume `TrainingConfig`).
 
 Este refactor **no altera** el comportamiento de ningún modelo entrenado
 ni las métricas que produce `run_bohb.py`; solo elimina rutas de código
 muertas y duplicación estructural.
+
+### Verificación final end-to-end (datos reales, GPU)
+
+Tras los 3 refactors, se ejecutó `run_smoke_test.sh` con datos reales
+(`auckland.mat`) sobre las 8 arquitecturas cuyos imports se reescribieron
+en la deduplicación (`disjointcnn`, `disjointresnet`, `fcn`, `resnet`,
+`tfrcnn`, `cnngru`, `cnnlstmgru`, `cnnlstm`):
+
+```
+Pasaron : 7 / 8
+Fallaron: 1 / 8
+  ❌ resnet
+```
+
+**El fallo de `resnet` no está relacionado con el refactor.** Traza de
+la causa real (ver `src/batch_logs/smoke_ecg2emg/auckland_resnet.log`):
+
+- Los 2 trials de HPO de `resnet` **completaron correctamente** (ambos
+  `TERMINATED` con `val_loss` reportado) — es decir, el modelo
+  refactorizado (`ResNet.py` importando `ResBlock3x` desde
+  `models.base.ResidualBlock`) sí ejecuta forward/backward sin problema.
+- El fallo ocurre únicamente en `final_train()` (`src/run_bohb.py:377`,
+  `pred = model(xb)`), **después** de que `run_bohb.py:326` envuelve el
+  modelo con `torch.compile(model, mode="default")`. La primera
+  invocación real dispara la compilación de `ResNet.py`'s
+  `nn.AdaptiveMaxPool1d(1)`, y el backend Inductor de PyTorch 2.5.1
+  falla al hacer *lowering* de `aten.adaptive_max_pool2d` bajo bfloat16
+  (`NameError: name 'max_pool2d_with_indices' is not defined` dentro de
+  `torch/_inductor/lowering.py`) — un bug/límite conocido de la
+  combinación PyTorch 2.5.1 + Inductor + `AdaptiveMaxPool1d` + autocast
+  bfloat16, no del código de este repositorio.
+- **Hallazgo adicional real** (sí accionable): el `try/except` alrededor
+  de `torch.compile(...)` en `run_bohb.py:325-328` solo captura errores
+  de la llamada de *wrapping* (que es perezosa y casi nunca falla en sí
+  misma); no protege contra fallos de compilación que ocurren en la
+  **primera invocación real** del modelo (como este caso). Es decir, el
+  mecanismo de fallback a modo *eager* que aparenta existir en el código
+  **no funciona** para este tipo de error. `resnet` nunca se había
+  ejecutado antes en este entorno (PyTorch 2.5.1+cu121), por lo que este
+  bug no es una regresión de esta migración, sino un hallazgo nuevo.
+- **Recomendación para el equipo** (no corregida en esta sesión, fuera
+  del alcance de los 3 refactors autorizados): envolver también la
+  primera llamada `model(xb)` (o el bloque de entrenamiento completo) en
+  un `try/except` que, ante un fallo de `torch.compile` en runtime,
+  reintente con el modelo sin compilar (`model = base_module(model)` ya
+  existe en `utils/runtime.py` para este propósito).
+
+Los otros 7 modelos (incluidos los 6 con imports reescritos que no habían
+fallado) produjeron checkpoints y métricas reales sin incidentes.
 
 **Conclusión:** el pipeline activo (`run_bohb.py` + `utils/` +
 `models/factory.py` + `models/register.py`) ejecuta correctamente de
