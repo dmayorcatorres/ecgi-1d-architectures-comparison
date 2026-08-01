@@ -22,6 +22,17 @@ versionado según [Semantic Versioning](https://semver.org/lang/es/).
   `ResNet`, `TFRCNN`, `CNN_GRU`, `CNN_LSTM_GRU`, `CNN_LSTM`) ahora
   importan desde `models.base`. Verificado con `pytest` (29/29) y forward
   pass real de los 8 modelos afectados.
+- Eliminados `src/models/model_factory.py`, `src/optimization/hpo_spaces.py`,
+  `src/optimization/ray_optimizer.py`, `src/training/engines.py` y
+  `src/training/__init__.py` — código verificado como no referenciado por
+  `run_bohb.py` (resolución de `docs/adr/0004-codigo-deprecado.md`).
+- `src/configs/base_config.py::TrainingConfig.variants` ya no usa tuplas
+  comentadas a mano en el código; su valor por defecto se lee de
+  `configs/training/default.yaml::active_default_variants`, con fallback
+  hardcodeado idéntico al valor histórico si el YAML no está disponible
+  (ver `docs/adr/0003-estrategia-configuracion.md`, sección
+  "Actualización"). `run_bohb.py` no fue modificado — no consume
+  `TrainingConfig`.
 
 ### Added
 - Reorganización del repositorio alineada con principios de ISO/IEC 5338,

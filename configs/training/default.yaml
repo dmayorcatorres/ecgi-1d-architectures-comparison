@@ -1,0 +1,51 @@
+# Documentación ejecutable de src/configs/base_config.py::TrainingConfig y
+# de los defaults de CLI en src/run_bohb.py. Ver nota de estado en
+# configs/data/default.yaml.
+
+seed: 42                   # GLOBAL_SEED en src/run_bohb.py
+
+hpo:
+  backend: ray              # "ray" | "optuna" (TrainingConfig.hpo_backend)
+  algorithm: bohb            # TuneBOHB + HyperBandForBOHB
+  num_samples: 15            # trials HPO (--num-samples, default CLI)
+  max_epochs: 50              # épocas máx. por trial y entrenamiento final (--max-epochs)
+
+training:
+  batch_size: 1                # default de TrainingConfig; el HPO explora [8,16,32] por trial
+  n_splits: 5                   # validación cruzada (K-fold), TrainingConfig.n_splits
+  final_epochs: 200              # entrenamiento final tras HPO, TrainingConfig.final_epochs
+  optuna_epochs: 5                 # solo si hpo.backend == "optuna"
+  optuna_trials: 5
+
+ray:
+  num_cpus: 6                # ray.init(num_cpus=...) en run_bohb.py
+  num_gpus: 1                 # ray.init(num_gpus=...) en run_bohb.py
+  object_store_memory_frac: 0.75
+
+# Catálogo completo por familia (equivalente a run_experiments.sh sin
+# restricción de METHODS=). Sobrescribible vía METHODS= al invocar
+# run_experiments.sh.
+variants:
+  cnn: [dilatedcnn, disjointcnn, disjointresnet, fcn, inceptiontime, lite,
+        mlp, multichanneldcnn, multiscalecnn, resnet, resnetcnn, tcn,
+        tfrcnn, zhaocnn]
+  rnn: [esn, indrnn, peepholelstm, qrnn, tlgru, vsgrunet, rnn_gru, rnn_lstm]
+  hybrid: [deepresidualbilstm, cnnlstm, cnngru, cnnlstmgru, disjointlstm,
+           lstmfcn, cnnbilstmbigrudil]
+  attention: [alstm, transformer1d, informer1d, autoformer1d, patchtst,
+              vit1d, timenet1d]
+
+# Subconjunto activo por defecto de src/configs/base_config.py::TrainingConfig.variants
+# (leído en runtime por base_config.py, ver docs/adr/0003). Es
+# intencionalmente distinto de variants.cnn de arriba: en el código
+# fuente original varias arquitecturas CNN estaban comentadas
+# (inceptiontime, lite, mlp, multichanneldcnn, multiscalecnn) — se
+# preserva ese subconjunto exacto para no alterar el comportamiento por
+# defecto al externalizar la configuración. Edita esta lista (no el
+# código Python) para cambiar qué variantes evalúa TrainingConfig() sin
+# argumentos.
+active_default_variants: [dilatedcnn, disjointcnn, disjointresnet, fcn,
+                           resnet, resnetcnn, tcn, tfrcnn, zhaocnn]
+
+determinism:
+  strict: false               # utils/runtime.py::STRICT_DETERMINISM — no determinista en GPU por defecto

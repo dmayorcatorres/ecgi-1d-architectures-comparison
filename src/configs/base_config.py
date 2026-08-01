@@ -1,6 +1,35 @@
 # src/configs/base_config.py
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Tuple
+
+# Fallback si configs/training/default.yaml no existe o no es legible.
+# Debe mantenerse igual al valor de "active_default_variants" en ese YAML
+# (ver docs/adr/0003-estrategia-configuracion.md) — es el mismo
+# subconjunto de arquitecturas CNN que este archivo tenía hardcodeado
+# antes de externalizar la configuración.
+_FALLBACK_VARIANTS: Tuple[str, ...] = (
+    "dilatedcnn", "disjointcnn", "disjointresnet", "fcn",
+    "resnet", "resnetcnn", "tcn", "tfrcnn", "zhaocnn",
+)
+
+
+def _load_default_variants() -> Tuple[str, ...]:
+    """Lee configs/training/default.yaml::active_default_variants.
+
+    Si el archivo no existe, no es legible, o PyYAML no está instalado,
+    devuelve _FALLBACK_VARIANTS (comportamiento idéntico al que tenía
+    este módulo antes de externalizar la configuración a YAML).
+    """
+    yaml_path = Path(__file__).resolve().parents[2] / "configs" / "training" / "default.yaml"
+    try:
+        import yaml
+        with open(yaml_path, "r") as f:
+            data = yaml.safe_load(f)
+        return tuple(data["active_default_variants"])
+    except Exception:
+        return _FALLBACK_VARIANTS
+
 
 @dataclass
 class TrainingConfig:
@@ -16,10 +45,10 @@ class TrainingConfig:
     n_splits:       int = 5
     final_epochs:   int = 200
 
-    
+
     optuna_epochs:  int = 5
     optuna_trials:  int = 5
-    
+
     # ─── Otros parámetros ───────────────────────────────────────────────
     verbose:         bool = False
     input_channels:  int  = 12
@@ -28,17 +57,10 @@ class TrainingConfig:
 
 
     # ─── Variantes a evaluar ────────────────────────────────────────────
-
-    # Hybrids
-    #variants: Tuple[str, ...] = ("deepresidualbilstm", "cnngru", "cnnlstm", "cnnlstmgru", "disjointlstm", "lstmfcn", "cnnbilstmbigrudil")
-    
-    # CNNs
-    variants: Tuple[str, ...] = ("dilatedcnn", "disjointcnn", "disjointresnet", "fcn", #"inceptiontime", "lite", "mlp",  "multichanneldcnn", "multiscalecnn", #"oscnn" ,
-        "resnet", "resnetcnn", "tcn", "tfrcnn", "zhaocnn",)
-
-    # RNNs
-    #variants: Tuple[str, ...] = ("esn", "indrnn","peepholelstm" , "qrnn", "tlgru", "vsgrunet", "rnn_gru", "rnn_lstm",)
-
-    # Transformers / Attentions
-    #variants: Tuple[str, ...] = ("alstm", "transformer1d", "autoformer1d", "informer1d", "patchtst",) # "atbased", "transformer1d", "autoformer1d", "informer1d", "patchtst", "vit1d")
+    # Leído desde configs/training/default.yaml::active_default_variants.
+    # Para cambiar qué familia/subconjunto se evalúa por defecto, edita
+    # ese YAML (no este archivo) — ver docs/adr/0003. El catálogo
+    # completo por familia (CNN/RNN/híbridas/atención) está documentado
+    # en configs/training/default.yaml::variants.
+    variants: Tuple[str, ...] = field(default_factory=_load_default_variants)
 
