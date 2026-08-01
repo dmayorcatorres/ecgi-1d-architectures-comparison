@@ -1,0 +1,9 @@
+# Dependencias de desarrollo: pruebas, estilo, análisis estático, SBOM.
+-r requirements.txt
+
+pytest>=8.0
+pytest-cov>=5.0
+ruff>=0.5          # lint + formato (reemplaza flake8/black/isort en un solo tool)
+mypy>=1.10         # verificación de tipos (uso incremental, ver pyproject.toml)
+pip-audit>=2.7     # análisis de dependencias vulnerables (ver SECURITY.md)
+cyclonedx-bom>=4.0 # generación de SBOM (ver sbom/README.md)

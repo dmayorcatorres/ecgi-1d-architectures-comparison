@@ -1,0 +1,24 @@
+# Documentación ejecutable de la evaluación realizada por
+# src/utils/metrics.py::ECGMetricsCalculator dentro de run_pipeline()
+# (src/run_bohb.py). Ver nota de estado en configs/data/default.yaml.
+
+metrics:
+  - name: mae
+    fn: compute_mae
+  - name: mse
+    fn: compute_mse
+  - name: rmse
+    fn: compute_rmse
+  - name: cc               # coeficiente de correlación
+    fn: compute_cc
+  - name: spectral_cosine_similarity
+    fn: _spectral_cosine_similarity
+  - name: max_cross_correlation
+    fn: _max_cross_correlation
+
+output:
+  metrics_log: src/metrics_log.xlsx     # TODO (Fase 2): migrar a reports/results/metrics_log.xlsx
+  loss_curves_dir: src/loss_curves       # solo si --save-curves
+  save_curves_default: false
+
+split_used_for_evaluation: test   # partición held-out del split 60/20/20

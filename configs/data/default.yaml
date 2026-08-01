@@ -1,0 +1,47 @@
+# Documentación ejecutable de la configuración de datos realmente usada por
+# src/run_bohb.py y src/data/datamodule.py::ECGDataModule.
+#
+# ESTADO: complemento no invasivo. El pipeline activo (run_bohb.py) sigue
+# leyendo estos valores desde su propio código y desde src/config.py
+# (DataConfig); este YAML documenta los valores reales por defecto y es el
+# punto de partida para una futura carga por Hydra/OmegaConf (ver
+# docs/adr/0003-estrategia-configuracion.md). No renombrar claves sin
+# actualizar esa migración futura.
+
+datasets:
+  kitpvc:
+    path: src/data/kitpvc/kitpvc.mat          # excepción: sin subcarpeta raw/
+  ckitpvc:
+    path: src/data/ckitpvc/raw/ckitpvc.mat
+  auckland:
+    path: src/data/auckland/raw/auckland.mat
+  bordeaux:
+    path: src/data/bordeaux/raw/bordeaux.mat
+  utah2002:
+    path: src/data/utah2002/raw/utah2002.mat
+
+# Claves esperadas dentro de cada .mat (ver ECGDataModule.__init__ y
+# ECGDataModule.prepare_data en src/data/datamodule.py).
+mat_keys:
+  key_x: emg
+  key_y: tag
+  key_bspm: ecg
+
+# direction: "ecg2emg" => x=ecg, y=emg | "emg2ecg" => x=emg, y=ecg
+direction: ecg2emg
+
+time_steps: 256
+
+# Split reproducible 60/20/20 (train/val/test), estratificado por labels,
+# implementado en src/utils/split.py::stratified_split_indices_approx.
+split:
+  train_frac: 0.6
+  val_frac: 0.2
+  test_frac: 0.2
+  seed: 42               # == GLOBAL_SEED en src/run_bohb.py
+  strategy: stratified_approx
+
+# TODO: confirmar si el split es a nivel de "ventana"/muestra o a nivel de
+# sujeto/paciente. Si es a nivel de muestra y un mismo sujeto contribuye
+# múltiples ventanas, existe riesgo de fuga de datos train/test — ver
+# docs/risks_and_limitations.md.

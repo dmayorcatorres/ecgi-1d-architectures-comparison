@@ -1,0 +1,22 @@
+# Evita que datos, checkpoints, resultados y artefactos pesados entren en la
+# imagen Docker (deben montarse como volumen, ver compose.yaml).
+.git/
+src/data/
+src/checkpoints/
+src/ray_results/
+src/batch_logs/
+src/loss_curves/
+reports/
+models/checkpoints/
+models/exported/
+*.mat
+*.pt
+*.pth
+*.pkl
+*.log
+__pycache__/
+*.pyc
+.venv/
+.env
+*.deb
+*.pin

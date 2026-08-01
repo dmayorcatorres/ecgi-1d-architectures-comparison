@@ -1,0 +1,52 @@
+name: Tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: tests-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  fast-tests:
+    # Pruebas rápidas: unit/data/model/integration, tensores sintéticos,
+    # sin GPU, sin datasets reales. Se ejecutan en cada push/PR.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+          cache: pip
+      - run: |
+          pip install torch --index-url https://download.pytorch.org/whl/cpu
+          pip install -r requirements.txt
+          pip install -r requirements-dev.txt
+      - run: pytest tests/unit tests/data tests/model tests/integration -q --cov=src --cov-report=xml
+      - uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: coverage.xml
+
+  smoke-tests:
+    # Ciclo mínimo end-to-end con datos sintéticos (marker `smoke`), más
+    # lento que fast-tests pero NO entrena con datos reales ni ejecuta el
+    # barrido completo de 36 arquitecturas — ver tests/smoke/.
+    runs-on: ubuntu-latest
+    needs: fast-tests
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+          cache: pip
+      - run: |
+          pip install torch --index-url https://download.pytorch.org/whl/cpu
+          pip install -r requirements.txt
+          pip install -r requirements-dev.txt
+      - run: pytest tests/smoke -q -m smoke

@@ -1,0 +1,30 @@
+name: Validate Docker image
+
+on:
+  push:
+    branches: [main]
+    paths: [Dockerfile, .dockerignore, requirements.txt, compose.yaml]
+  pull_request:
+    paths: [Dockerfile, .dockerignore, requirements.txt, compose.yaml]
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - name: Build image (no push)
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: false
+          tags: ecgi-1d-architectures-comparison:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      - name: Comprobación de salud básica (import de dependencias, sin GPU)
+        run: |
+          docker run --rm ecgi-1d-architectures-comparison:ci \
+            python -c "import torch, ray, numpy; print('ok')"

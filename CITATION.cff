@@ -1,0 +1,42 @@
+cff-version: 1.2.0
+message: >-
+  Si utiliza este software o los resultados de esta comparación de
+  arquitecturas 1D para señales ECG/EMG/ECGi, cítelo usando los metadatos de
+  este archivo.
+title: >-
+  ecgi-1d-architectures-comparison: comparación de arquitecturas 1D de deep
+  learning para regresión ECG <-> EMG en electrocardiografía por imágenes
+  (ECGi)
+type: software
+authors:
+  - family-names: Mayorca Torres
+    given-names: Dago
+    email: dmayorca@umariana.edu.co
+    affiliation: "TODO: confirmar nombre completo del programa/facultad, Universidad Mariana"
+repository-code: "https://github.com/dmayorcatorres/cgan-ecgi"
+license: MIT
+version: "0.1.0"
+date-released: "TODO: completar fecha de la primera versión publicada"
+keywords:
+  - deep learning
+  - ECGi
+  - electrocardiographic imaging
+  - time series regression
+  - ECG
+  - EMG
+  - PyTorch
+  - hyperparameter optimization
+  - BOHB
+preferred-citation:
+  type: unpublished
+  title: >-
+    TODO: completar título del artículo/tesis asociado a este repositorio, si
+    existe
+  authors:
+    - family-names: Mayorca Torres
+      given-names: Dago
+  year: 2026
+  notes: >-
+    TODO: reemplazar por la referencia definitiva (journal, conferencia o
+    trabajo de grado) cuando esté disponible. No se ha verificado publicación
+    asociada a este repositorio al momento de generar este archivo.

@@ -1,0 +1,53 @@
+[project]
+name = "ecgi-1d-architectures-comparison"
+version = "0.1.0"
+description = "Comparación de arquitecturas 1D de deep learning (CNN, RNN, híbridas, atención) para regresión ECG<->EMG en electrocardiografía por imágenes (ECGi)"
+readme = "README.md"
+license = { text = "MIT" }
+requires-python = ">=3.10"
+authors = [
+    { name = "Dago Mayorca Torres", email = "dmayorca@umariana.edu.co" },
+]
+keywords = ["deep-learning", "ecgi", "ecg", "emg", "time-series", "pytorch", "hpo", "bohb"]
+
+# NOTA DE ARQUITECTURA (ver docs/adr/0002-estructura-repositorio.md):
+# El código bajo `src/` usa imports "planos" (p. ej. `from models.factory import ...`,
+# no `from ecgi_1d.models.factory import ...`), y `run_bohb.py` inserta su propio
+# directorio en sys.path en tiempo de ejecución. Por eso este pyproject.toml NO
+# declara todavía un paquete instalable vía `pip install .`; convertirlo en un
+# paquete real requeriría reescribir los imports en ~90 módulos, lo cual se deja
+# documentado como recomendación futura (alto riesgo para la lógica científica
+# existente) y no se ejecuta en esta migración.
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.pytest.ini_options]
+# Permite que las pruebas importen los módulos de src/ tal como lo hace
+# run_bohb.py (from models.factory import ..., from utils.split import ...)
+# sin necesidad de reescribir los imports existentes.
+pythonpath = ["src"]
+testpaths = ["tests"]
+markers = [
+    "gpu: pruebas que requieren GPU (se omiten si no hay CUDA disponible)",
+    "smoke: pruebas de humo del pipeline completo, más lentas",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+exclude = ["src/ray_results", "src/batch_logs", "src/checkpoints", "src/data"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I"]
+ignore = ["E501"]  # líneas largas toleradas en el código científico existente
+
+[tool.mypy]
+python_version = "3.10"
+ignore_missing_imports = true
+# Verificación de tipos incremental y no bloqueante: el código existente no
+# tiene type hints completos; se activa "modo laxo" para no romper CI hasta
+# que el equipo decida adoptar tipado estricto módulo por módulo.
+disallow_untyped_defs = false
+check_untyped_defs = false

@@ -1,0 +1,43 @@
+# Documentación ejecutable de la configuración de modelo. La fuente de
+# verdad sigue siendo src/models/register.py (MODEL_REGISTRY +
+# SPACE_REGISTRY) — este YAML no se carga automáticamente por el pipeline
+# activo (ver nota de estado en configs/data/default.yaml).
+
+# Parámetros comunes a TODAS las arquitecturas (== DataConfig en
+# src/config.py, inyectados por ModelFactory en src/models/factory.py).
+common:
+  time_steps: 256          # se sobrescribe en runtime con x.shape[2] del dataset cargado
+  input_channels: 12       # se sobrescribe en runtime con x.shape[1]
+  output_channels: 256     # se sobrescribe en runtime con y.shape[1]
+
+# Familias de arquitecturas disponibles (36 variantes registradas en
+# src/models/register.py). El espacio de búsqueda de hiperparámetros de
+# cada una vive en SPACE_REGISTRY y NO se duplica aquí para evitar que
+# este archivo quede desactualizado respecto al código (ver
+# docs/architecture.md para el detalle por arquitectura).
+families:
+  cnnbased:
+    module: src/models/cnnbased/
+    variants: [dilatedcnn, disjointcnn, disjointresnet, fcn, inceptiontime,
+               lite, mlp, multichanneldcnn, multiscalecnn, resnet, resnetcnn,
+               tcn, tfrcnn, zhaocnn]
+  rnnbased:
+    module: src/models/rnnbased/
+    variants: [esn, indrnn, peepholelstm, qrnn, tlgru, vsgrunet, rnn_gru, rnn_lstm]
+  hybridbased:
+    module: src/models/hybridbased/
+    variants: [deepresidualbilstm, cnnlstm, cnngru, cnnlstmgru, disjointlstm,
+               lstmfcn, cnnbilstmbigrudil]
+  atbased:
+    module: src/models/atbased/
+    variants: [alstm, transformer1d, informer1d, autoformer1d, patchtst,
+               vit1d, timenet1d]
+
+# Hiperparámetros comunes a todos los trials de HPO, definidos en
+# src/run_bohb.py (fuera del espacio específico de cada arquitectura).
+common_search_space:
+  weight_decay: [0, 1.0e-6, 1.0e-5, 1.0e-4]
+  batch_size: [8, 16, 32]
+  # learning rate: por defecto _LR_DEFAULT, con overrides por variante en
+  # _LR_CHOICES (ver src/run_bohb.py) — no se reproduce aquí para evitar
+  # divergencia; consultar el código como fuente de verdad.

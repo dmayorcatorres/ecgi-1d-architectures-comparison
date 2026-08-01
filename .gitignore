@@ -1,4 +1,6 @@
-# Ignorar varios archivos con una extensión específica
+# ── Artefactos de datos, entrenamiento y experimentos (nunca en Git) ───────
+# Ver docs/data_documentation.md y models/README.md para dónde viven de
+# verdad estos archivos (almacenamiento local/institucional, no el repo).
 *.log
 *.pt
 *.pth
@@ -7,9 +9,58 @@
 *.npz
 *.npy
 *.png
-*.pyc
-*.json
 *.pkl
 *.csv
+*.xlsx
 src/ray_results/
 src/batch_logs/
+src/checkpoints/
+src/data/**/raw/
+src/data/kitpvc/
+src/loss_curves/
+reports/figures/
+reports/results/
+reports/tables/
+models/checkpoints/
+models/exported/
+
+# Excepciones explícitas: estos SÍ deben versionarse pese a los patrones de
+# arriba (documentación, plantillas, registro de experimentos vacío/ejemplo).
+!data/README.md
+!models/README.md
+!reports/**/README.md
+!reports/**/.gitkeep
+!experiments/experiment_registry.csv
+!docs/**/*.png
+!docs/**/*.csv
+
+# ── Python ──────────────────────────────────────────────────────────────────
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+.eggs/
+.Python
+build/
+dist/
+
+# ── Entornos y herramientas ─────────────────────────────────────────────────
+.venv/
+venv/
+.env
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# ── Instaladores/binarios ajenos al proyecto (no deben vivir en el repo) ───
+*.deb
+*.deb.*
+*.pin
+*.pin.*
+
+# ── IDE / SO ─────────────────────────────────────────────────────────────────
+.vscode/
+.idea/
+.DS_Store

@@ -1,0 +1,31 @@
+
+# Uso:
+#   docker compose build
+#   docker compose run --rm ecgi bash
+#   docker compose run --rm ecgi python src/run_bohb.py --dataset kitpvc --method mlp --num-samples 2 --max-epochs 2
+#
+# Requiere el NVIDIA Container Toolkit para exponer la GPU al contenedor.
+# TODO: el equipo debe confirmar la ruta real de datos en el host a montar
+# en /workspace/src/data (aquí se usa ./src/data como valor por defecto).
+services:
+  ecgi:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: ecgi-1d-architectures-comparison:local
+    working_dir: /workspace
+    volumes:
+      - ./src/data:/workspace/src/data
+      - ./src/checkpoints:/workspace/src/checkpoints
+      - ./reports:/workspace/reports
+    environment:
+      - CUDA_VISIBLE_DEVICES=${CUDA_VISIBLE_DEVICES:-0}
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    stdin_open: true
+    tty: true
