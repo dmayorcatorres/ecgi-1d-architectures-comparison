@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from typing import Union
-from .ResidualBlock import ResBlock3x
+from models.base.ResidualBlock import ResBlock3x
 
 class ResNet(nn.Module):
     """

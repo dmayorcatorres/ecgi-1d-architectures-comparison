@@ -1,66 +1,151 @@
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
-from typing import Union
-from .ResidualBlock import ResBlock3x
+from typing import Sequence, Union
+from models.base.ResidualBlock import ResBlock3x
 
+
+# =========================
+# MLP (salida: B, C_out, T)
+# =========================
+class MLP(nn.Module):
+    """
+    MLP para reconstrucción de series temporales.
+
+    Parámetros:
+      - time_steps (int): Pasos temporales de salida (y esperados de entrada).
+      - input_channels (int): Canales de entrada.
+      - output_channels (int): Canales de salida.
+      - stage1_out (int): Neuronas capa oculta 1 (default=128).
+      - stage2_out (int): Neuronas capa oculta 2 (default=128).
+      - stage3_out (int): Neuronas capa oculta 3 (default=128).
+      - dropout_rate (float | Sequence[float]): tasa única o lista de 4 tasas
+        [in, h1, h2, out]. Si se da un float, se replica a las 4 posiciones.
+    """
+
+    def __init__(
+        self,
+        time_steps: int,
+        input_channels: int,
+        output_channels: int,
+        stage1_out: int = 128,
+        stage2_out: int = 128,
+        stage3_out: int = 128,
+        dropout_rate: Union[float, Sequence[float]] = 0.2,
+    ):
+        super().__init__()
+        self.time_steps = int(time_steps)
+        self.input_channels = int(input_channels)
+        self.output_channels = int(output_channels)
+
+        d0, d1, d2, d3 = self._parse_dropout(dropout_rate)
+
+        in_features = self.input_channels * self.time_steps
+        out_features = self.output_channels * self.time_steps
+
+        self.flatten = nn.Flatten()
+
+        self.layers = nn.Sequential(
+            nn.Dropout(d0),
+            nn.Linear(in_features, stage1_out),
+            nn.ReLU(inplace=True),
+
+            nn.Dropout(d1),
+            nn.Linear(stage1_out, stage2_out),
+            nn.ReLU(inplace=True),
+
+            nn.Dropout(d2),
+            nn.Linear(stage2_out, stage3_out),
+            nn.ReLU(inplace=True),
+
+            nn.Dropout(d3),
+            nn.Linear(stage3_out, out_features),
+        )
+
+        self._init_weights()
+
+    def _parse_dropout(self, p: Union[float, Sequence[float]]):
+        if isinstance(p, (float, int)):
+            return float(p), float(p), float(p), float(p)
+        p = list(p)
+        assert len(p) == 4, "dropout_rate debe tener 4 valores [in, h1, h2, out]"
+        return tuple(float(x) for x in p)
+
+    def _init_weights(self):
+        for m in self.modules():
+            if isinstance(m, nn.Linear):
+                nn.init.kaiming_uniform_(m.weight, a=0.01)
+                if m.bias is not None:
+                    nn.init.zeros_(m.bias)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        # x: (B, C_in, T)
+        B, C, T = x.shape
+        assert C == self.input_channels, f"Se esperaban {self.input_channels} canales, llega {C}"
+        assert T == self.time_steps, f"Se esperaban T={self.time_steps}, llega {T}"
+
+        x = self.flatten(x)                  # (B, C_in*T)
+        out = self.layers(x)                 # (B, C_out*T)
+        out = out.reshape(B, self.output_channels, self.time_steps)
+        return out
+
+
+# ===========================================
+# FCN (salida: B, C_out, T) sin AdaptivePool
+# ===========================================
 class FCN(nn.Module):
     """
-    FCNModel para, por ejemplo, reconstruir series temporales de EMG a ECG.
-    
-    Este modelo Fully Convolutional Network (FCN) utiliza bloques residuales
-    y un Global Max Pooling para extraer y comprimir la representación, 
-    luego expande la señal a la longitud temporal especificada en 'time_steps'
-    mediante una capa fully connected.
-    
+    Fully Convolutional Network para reconstrucción de series temporales.
+
     Parámetros:
-      - time_steps (int): Número de pasos temporales esperados en la salida 
-                          (debe coincidir con la dimensión temporal del target).
-      - input_channels (int): Número de canales de la señal de entrada (ej. 221).
-      - output_channels (int): Número de canales de la señal de salida (ej. 141).
-      - stage1_out (int, opcional): Número de filtros en los bloques residuales (por defecto 64).
+      - time_steps (int): longitud temporal de salida (y esperada de entrada).
+      - input_channels (int): canales de entrada.
+      - output_channels (int): canales de salida.
+      - stage1_out (int): nº de filtros en los bloques residuales (default=64).
+      - dropout_rate (float): dropout antes de la capa fully connected final.
     """
-    def __init__(self, time_steps: int, input_channels: int, output_channels: int, stage1_out: int = 64):
+    def __init__(
+        self,
+        time_steps: int,
+        input_channels: int,
+        output_channels: int,
+        stage1_out: int = 64,
+        dropout_rate: float = 0.0,
+    ):
         super().__init__()
-        self.time_steps = time_steps          # Se asume que ya has reducido tu señal a 'time_steps' (p.ej. 256)
-        self.output_channels = output_channels
-        
-        # Bloques residuales (ajusta a tu gusto la configuración)
-        self.block1 = ResBlock3x(input_channels, stage1_out)
+        self.time_steps = int(time_steps)
+        self.input_channels = int(input_channels)
+        self.output_channels = int(output_channels)
+
+        self.block1 = ResBlock3x(self.input_channels, stage1_out)
         self.block2 = ResBlock3x(stage1_out, stage1_out)
         self.block3 = ResBlock3x(stage1_out, stage1_out)
-        
-        # Global Max Pooling sobre la dimensión temporal (reduce T a 1)
-        self.global_max = nn.AdaptiveMaxPool1d(1)
-        
-        # Capa fully connected final: de (batch, stage1_out) -> (batch, output_channels * time_steps)
-        self.fc = nn.Linear(stage1_out, output_channels * time_steps)
-    
+
+        # Reducción temporal estable para torch.compile (evita Adaptive* pooling):
+        # Usamos max sobre el eje temporal en forward.
+        self.pre_fc_dropout = nn.Dropout(float(dropout_rate))
+        self.fc = nn.Linear(stage1_out, self.output_channels * self.time_steps)
+
+        self._init_weights()
+
+    def _init_weights(self):
+        nn.init.kaiming_uniform_(self.fc.weight, a=0.01)
+        if self.fc.bias is not None:
+            nn.init.zeros_(self.fc.bias)
+
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        """
-        Parámetros:
-          x: Tensor de forma (B, input_channels, T_reducido)
-             - B: batch size
-             - input_channels: canales de la señal
-             - T_reducido: longitud temporal tras PAA (por ejemplo, 256)
-        
-        Retorna:
-          Tensor de forma (B, output_channels, self.time_steps)
-          donde self.time_steps es el valor que se pasó al constructor.
-        """
-        # Pasa por los bloques residuales
-        out = self.block1(x)    # (B, stage1_out, T_reducido)
-        out = self.block2(out)  # (B, stage1_out, T_reducido)
-        out = self.block3(out)  # (B, stage1_out, T_reducido)
-        
-        # Global Max Pooling => (B, stage1_out, 1)
-        out = self.global_max(out)
-        # Quitar la dimensión extra => (B, stage1_out)
-        out = out.squeeze(-1)
-        
-        # Capa fully connected => (B, output_channels * time_steps)
-        out = self.fc(out)
-        
-        # Reshape final => (B, output_channels, time_steps)
-        out = out.view(-1, self.output_channels, self.time_steps)
+        # x: (B, C_in, T)
+        B, C, T = x.shape
+        assert C == self.input_channels, f"Se esperaban {self.input_channels} canales, llega {C}"
+        assert T == self.time_steps, f"Se esperaban T={self.time_steps}, llega {T}"
+
+        out = self.block1(x)     # (B, stage1_out, T)
+        out = self.block2(out)   # (B, stage1_out, T)
+        out = self.block3(out)   # (B, stage1_out, T)
+
+        # Reducción temporal robusta (sin AdaptiveMaxPool1d):
+        out = torch.amax(out, dim=-1)  # (B, stage1_out)
+
+        out = self.pre_fc_dropout(out)
+        out = self.fc(out)             # (B, C_out*T)
+        out = out.reshape(B, self.output_channels, self.time_steps)
         return out

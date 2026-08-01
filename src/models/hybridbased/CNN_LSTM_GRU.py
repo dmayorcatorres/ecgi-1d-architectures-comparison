@@ -1,6 +1,6 @@
 import torch
 import torch.nn as nn
-from .ConvSEBlock import ConvSEBlock
+from models.base.ConvSEBlock import ConvSEBlock
 
 class CNN_LSTM_GRU(nn.Module):
     """

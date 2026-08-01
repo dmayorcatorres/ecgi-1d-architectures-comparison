@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from .DisjointBase import DisjointBase
+from models.base.DisjointBase import DisjointBase
 
 class ResidualDisjointBlock(nn.Module):
     def __init__(self, in_channels: int, out_channels: int, temporal_kernel: int):
