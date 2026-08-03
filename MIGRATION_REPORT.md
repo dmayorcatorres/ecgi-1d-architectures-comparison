@@ -159,6 +159,88 @@ arquitecturas) para no incurrir en un entrenamiento extenso innecesario;
 el equipo puede correr `bash run_smoke_test.sh` sin restricción de
 `METHODS` para la cobertura completa cuando lo considere necesario.
 
+## Fase 6 — Verificación completa de los 36 métodos (2026-08-01/02, a pedido explícito)
+
+A pedido del usuario ("verificar que todos los 35/36 métodos se ajustan
+a los cambios y ejecutan correctamente"), se ejecutó
+`run_smoke_test.sh` **sin restricción de `METHODS`** — las 36
+arquitecturas registradas en `MODEL_REGISTRY`, sobre `auckland.mat`
+(datos reales), con GPU real (NVIDIA GTX 1650).
+
+```
+Pasaron : 34 / 36
+Fallaron: 2 / 36
+  ❌ resnet          (ya documentado arriba — bug de torch.compile/Inductor, no relacionado al refactor)
+  ❌ autoformer1d     (hallazgo nuevo, ver abajo)
+```
+
+### Verificación sistemática de carga de datos y evaluación de métricas
+
+Se revisaron los 36 logs (`src/batch_logs/smoke_ecg2emg/auckland_*.log`)
+para confirmar, no solo que el proceso terminara con código de salida 0,
+sino que las etapas internas del pipeline realmente se ejecutaron:
+
+| Etapa | Resultado |
+|---|---|
+| `ECGDataModule` cargó el dataset (`"Dataset cargado:"` en el log) | **36/36** — incluso en los 2 modelos que luego fallaron, la carga y el split de datos fueron correctos |
+| Checkpoint guardado (`"Checkpoint:"`) | **34/34** de los exitosos (0 falsos positivos: ningún modelo "OK" se quedó sin checkpoint) |
+| `ECGMetricsCalculator` calculó métricas finales (`"Métricas finales"`) | **34/34** de los exitosos, exactamente los mismos 34 con checkpoint — consistente, sin corrupciones parciales |
+
+Esto confirma que **la carga de datos y el preprocesamiento
+(`ECGDataModule`/`load_mat_cached`/split 60/20/20) funcionan
+correctamente para las 36 arquitecturas** — los dos fallos ocurren
+ambos en el *forward pass* del modelo (no en la capa de datos), y la
+evaluación de métricas (`ECGMetricsCalculator`) se ejecutó sin errores
+en los 34 casos donde el modelo llegó a producir una predicción.
+
+### Hallazgo nuevo: `autoformer1d` — `torch.fft.rfft` no soporta BFloat16
+
+Traza real (`error.txt` del trial, ubicado en el directorio temporal de
+Ray, no en el log principal — Ray solo referencia la ruta):
+
+```
+File "src/models/atbased/Autoformer1D.py", line 84, in forward
+  Qf = torch.fft.rfft(Q.permute(0, 1, 3, 2), dim=-1)
+RuntimeError: Unsupported dtype BFloat16
+```
+
+**Causa:** `Autoformer1D` implementa su mecanismo de *AutoCorrelation*
+con `torch.fft.rfft()` (línea 84 de `src/models/atbased/Autoformer1D.py`).
+`torch.fft.rfft` **no soporta tensores en `bfloat16`** en esta versión
+de PyTorch (2.5.1) — es una limitación de PyTorch, no un bug introducido
+por este repositorio. `src/utils/runtime.py::amp_config()` activa
+`bfloat16` automáticamente cuando la GPU lo soporta
+(`torch.cuda.is_bf16_supported()`), y la GTX 1650 de este entorno lo
+soporta, por lo que el autocast bf16 queda activo por defecto y rompe
+cualquier arquitectura que use FFT internamente bajo ese autocast.
+
+**No relacionado con el refactor de esta sesión** — `Autoformer1D.py` no
+fue tocado en ninguno de los 3 refactors (deduplicación, eliminación de
+código muerto, externalización de config), y el bug es puramente de
+compatibilidad `torch.fft` + `bfloat16` + PyTorch 2.5.1. `autoformer1d`
+nunca se había ejecutado antes en este entorno.
+
+**Recomendación para el equipo** (no corregida en esta sesión, fuera del
+alcance autorizado): en `Autoformer1D.py`, forzar el bloque de FFT a
+`float32` antes de `torch.fft.rfft`/`irfft` y castear de vuelta después
+(patrón común: `with torch.autocast(device_type="cuda", enabled=False):
+... .float() ...`), o excluir explícitamente `autoformer1d` del autocast
+bf16 en `run_bohb.py`.
+
+### Conclusión de la Fase 6
+
+De las **36 arquitecturas registradas, 34 se ajustan correctamente a los
+3 refactors de esta sesión y ejecutan de punta a punta** (carga →
+preprocesamiento → HPO → entrenamiento final → evaluación de métricas →
+checkpoint) sobre datos reales y GPU real. Los 2 fallos restantes
+(`resnet`, `autoformer1d`) son bugs de compatibilidad PyTorch/GPU
+**preexistentes y no relacionados con el refactor** — ambos ya estaban
+latentes antes de esta sesión y simplemente nunca se habían ejecutado en
+este entorno específico (PyTorch 2.5.1+cu121, GPU con soporte bf16).
+Ninguno de los 3 refactors autorizados (deduplicación, eliminación de
+código muerto, externalización de config) causó ninguna de las 2
+fallas.
+
 ## Fase 1 — Archivos nuevos (sin riesgo, completada)
 
 Se crearon ~50 archivos nuevos de documentación, configuración,
