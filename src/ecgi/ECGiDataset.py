@@ -198,10 +198,12 @@ class ECGiDataset:
                 f"signals={list(self.signals.keys())}, "
                 f"structures={list(self.structures.keys())})")
 
-    @property
-    def summary(self) -> Dict[str, Any]:
-        # Ya definida en tu código
-        return {
+    def print_summary(self) -> None:
+        """
+        Imprime un resumen amigable de las dimensiones de señales,
+        estructuras y metadatos.
+        """
+        summary_dict = {
             'signals': {k: np.array(v).shape for k, v in self.signals.items()},
             'structures': {
                 k: {f: (s.shape if s is not None else None)
@@ -211,13 +213,6 @@ class ECGiDataset:
             'metadata': self.metadata,
             'device': str(self.device)
         }
-
-    def print_summary(self) -> None:
-        """
-        Imprime un resumen amigable de las dimensiones de señales,
-        estructuras y metadatos.
-        """
-        summary_dict = self.summary
         logger.info("=== ECGiDataset Summary ===")
 
         # Imprimir shapes de señales
