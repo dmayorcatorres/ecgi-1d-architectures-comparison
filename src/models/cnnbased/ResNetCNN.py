@@ -1,80 +1,124 @@
+# models/cnnbased/ResNetCNN.py
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
-from typing import Tuple
-from .ResidualBlock import ResBlock3x  # Se asume que este módulo define el bloque residual de 3 subcapas
+
+class BasicBlock1D(nn.Module):
+    """Bloque básico ResNet para 1D: conv3x1 → BN → ReLU → conv3x1 → BN + atajo → ReLU.
+    Conserva la longitud temporal T cuando stride=1 y padding=1."""
+    expansion = 1
+
+    def __init__(self, inplanes: int, planes: int, stride: int = 1) -> None:
+        super().__init__()
+        # Nota: usamos bias=False porque hay BatchNorm
+        self.conv1 = nn.Conv1d(inplanes, planes, kernel_size=3, stride=stride,
+                               padding=1, bias=False)
+        self.bn1   = nn.BatchNorm1d(planes)
+        self.relu  = nn.ReLU(inplace=True)
+        self.conv2 = nn.Conv1d(planes, planes, kernel_size=3, stride=1,
+                               padding=1, bias=False)
+        self.bn2   = nn.BatchNorm1d(planes)
+
+        self.downsample = None
+        if stride != 1 or inplanes != planes * self.expansion:
+            # Atajo 1x1 para igualar dimensiones de canal o stride (si se usara !=1)
+            self.downsample = nn.Sequential(
+                nn.Conv1d(inplanes, planes * self.expansion,
+                          kernel_size=1, stride=stride, bias=False),
+                nn.BatchNorm1d(planes * self.expansion),
+            )
+
+        # Inicialización Kaiming recomendada en ResNet
+        nn.init.kaiming_normal_(self.conv1.weight, nonlinearity="relu")
+        nn.init.kaiming_normal_(self.conv2.weight, nonlinearity="relu")
+        if self.downsample is not None:
+            nn.init.kaiming_normal_(self.downsample[0].weight, nonlinearity="linear")
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        identity = x
+
+        out = self.relu(self.bn1(self.conv1(x)))
+        out = self.bn2(self.conv2(out))
+
+        if self.downsample is not None:
+            identity = self.downsample(x)
+
+        out = self.relu(out + identity)
+        return out
+
 
 class ResNetCNN(nn.Module):
     """
-    ResNetCNN – Modelo de red residual para clasificación de series temporales.
+    ResNet1D “clásica” para series temporales:
+      stem: Conv1d(k=kernel_size_in, padding=same) + BN + ReLU
+      body: num_blocks × BasicBlock1D (sin cambiar T)
+      head: Conv1d(1×1) → output_channels (manteniendo T)
 
-    Esta arquitectura procesa la entrada en forma (B, C, T) mediante:
-      1. Una capa inicial de convolución 1D que transforma la entrada a stage1_out canales.
-      2. Una secuencia de bloques residuales (ResBlock3x) que extraen características profundas.
-      3. Un Global Average Pooling que reduce la dimensión temporal a 1 para obtener una representación global.
-      4. Una capa fully connected que mapea esta representación a la dimensión de salida.
-      5. Finalmente, la predicción (de forma (B, output_channels)) se replica a lo largo de la dimensión temporal,
-         produciendo una salida de forma (B, output_channels, T).
-
-    Parámetros:
-      - time_steps (int): Número de pasos temporales (T) de la entrada.
-      - input_channels (int): Número de canales de la entrada (C) (ej. 163 para ECG).
-      - output_channels (int): Número de clases o canales de salida (ej. 163 para ECG o 502 para EMG).
-      - num_blocks (int, opcional): Número de bloques residuales a utilizar (por defecto 1).
-      - stage1_out (int, opcional): Número de filtros en la capa inicial y en los bloques residuales (por defecto 64).
-      - kernel_size_in (int, opcional): Tamaño del kernel en la capa inicial (por defecto 7).
+    Parámetros (NO modificados):
+      - time_steps (int): longitud temporal T de la entrada/salida
+      - input_channels (int): canales de entrada C_in
+      - output_channels (int): canales de salida C_out
+      - num_blocks (int, opcional): nº de bloques residuales (por defecto 1)
+      - stage1_out (int, opcional): nº de canales intermedios (por defecto 64)
+      - kernel_size_in (int, opcional): kernel de la conv inicial (por defecto 7)
     """
-    def __init__(self, time_steps: int, input_channels: int, output_channels: int,
-                 num_blocks: int = 1, stage1_out: int = 64, kernel_size_in: int = 7) -> None:
+    def __init__(self,
+                 time_steps: int,
+                 input_channels: int,
+                 output_channels: int,
+                 num_blocks: int = 1,
+                 stage1_out: int = 64,
+                 kernel_size_in: int = 7) -> None:
         super().__init__()
         self.time_steps = time_steps
         self.output_channels = output_channels
 
-        # Capa inicial: transforma la entrada a stage1_out canales.
-        # Se espera que la entrada tenga forma (B, C, T).
-        self.conv_in = nn.Conv1d(in_channels=input_channels,
-                                 out_channels=stage1_out,
+        # ── Stem ───────────────────────────────────────────────────────────
+        padding = kernel_size_in // 2
+        self.conv_in = nn.Conv1d(input_channels, stage1_out,
                                  kernel_size=kernel_size_in,
-                                 padding=kernel_size_in // 2)
-        self.bn_in = nn.BatchNorm1d(stage1_out)
-        self.relu = nn.ReLU(inplace=True)
-        
-        # Bloques residuales: se emplean num_blocks bloques residuales.
-        # Cada bloque preserva la dimensión de salida (stage1_out).
-        self.res_blocks = nn.Sequential(*(ResBlock3x(stage1_out, stage1_out) for _ in range(num_blocks)))
-        
-        # Global Average Pooling: reduce la dimensión temporal a 1.
-        # Salida: (B, stage1_out, 1)
-        self.gap = nn.AdaptiveAvgPool1d(1)
-        # Capa fully connected: mapea la representación global a (B, output_channels).
-        self.fc = nn.Linear(stage1_out, output_channels)
+                                 padding=padding, bias=False)
+        self.bn_in   = nn.BatchNorm1d(stage1_out)
+        self.relu    = nn.ReLU(inplace=True)
+
+        # ── Cuerpo ResNet (T se preserva: stride=1 y padding=1) ───────────
+        self.inplanes = stage1_out
+        self.layers = self._make_layer(BasicBlock1D, planes=stage1_out,
+                                       blocks=num_blocks, stride=1)
+
+        # ── Head temporal: proyección a C_out manteniendo T ───────────────
+        self.head = nn.Conv1d(stage1_out, output_channels, kernel_size=1, bias=True)
+
+        # Inicialización del stem
+        nn.init.kaiming_normal_(self.conv_in.weight, nonlinearity="relu")
+
+    def _make_layer(self, block, planes: int, blocks: int, stride: int = 1) -> nn.Sequential:
+        layers = []
+        # Primer bloque (permite stride si algún día quisieras, aquí usamos 1)
+        layers.append(block(self.inplanes, planes, stride=stride))
+        self.inplanes = planes * block.expansion
+        # Resto de bloques
+        for _ in range(1, blocks):
+            layers.append(block(self.inplanes, planes, stride=1))
+        return nn.Sequential(*layers)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        """
-        Realiza la pasada hacia adelante.
+        # x: (B, C_in, T)
+        assert x.dim() == 3, f"Esperaba (B,C,T), obtuve {tuple(x.shape)}"
+        B, _, T = x.shape
 
-        Parámetros:
-          - x: Tensor de entrada de forma (B, C, T), donde:
-              B = tamaño del batch,
-              C = número de canales (input_channels),
-              T = número de pasos temporales.
-        
-        Retorna:
-          - Tensor de salida de forma (B, output_channels, T)
-        """
-        x = self.conv_in(x)
-        x = self.bn_in(x)
-        x = self.relu(x)
-        
-        # Aplicar los bloques residuales
-        x = self.res_blocks(x)
-        
-        # Global Average Pooling en la dimensión temporal: (B, stage1_out, 1)
-        x = self.gap(x).squeeze(-1)  # Ahora x tiene forma (B, stage1_out)
-        
-        # Capa fully connected: (B, stage1_out) → (B, output_channels)
-        x = self.fc(x)
-        
-        # Replicar la predicción a lo largo de la dimensión temporal para obtener (B, output_channels, T)
-        x = x.unsqueeze(-1).repeat(1, 1, self.time_steps)
-        return x
+        # Stem
+        x = self.relu(self.bn_in(self.conv_in(x)))
+        # Body
+        x = self.layers(x)
+        # Head a C_out manteniendo T
+        x = self.head(x)  # (B, C_out, T_actual)
+
+        # Seguridad: igualar exactamente a time_steps si hubiese pequeñas variaciones
+        if T != self.time_steps:
+            if x.size(-1) > self.time_steps:
+                x = x[..., :self.time_steps]
+            else:
+                pad = self.time_steps - x.size(-1)
+                x = nn.functional.pad(x, (0, pad))
+
+        return x  # (B, output_channels, time_steps)

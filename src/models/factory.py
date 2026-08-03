@@ -17,10 +17,17 @@ class ModelFactory:
     def create(self, variant: str, params: Dict[str, Any]):
         """Fusiona common + params, filtra args válidos y construye el modelo."""
         cls = MODEL_REGISTRY[variant.lower()]
-        # combina parámetros
         init_args = {**self.common, **params}
-        # filtrar según la firma de __init__
         sig = inspect.signature(cls.__init__)
-        filtered = {k: v for k, v in init_args.items()
-                    if k in sig.parameters}
+        # Si el constructor acepta **kwargs, pasamos todo (los kwargs lo absorben).
+        # Si no, filtramos a los parámetros declarados explícitamente.
+        has_var_kw = any(
+            p.kind == inspect.Parameter.VAR_KEYWORD
+            for p in sig.parameters.values()
+        )
+        if has_var_kw:
+            filtered = init_args
+        else:
+            filtered = {k: v for k, v in init_args.items()
+                        if k in sig.parameters}
         return cls(**filtered)

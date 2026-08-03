@@ -221,7 +221,6 @@ def _space_oscnn():
         "max_primes":    ("choice",[8,12,16,24,32]),
         "bottleneck":    ("choice",[4,8]),
         "dropout":       ("float",  0.0, 0.4, 0.1),
-        "batch_size":    ("int",    8,  64,  8),
     }
 
 @register_space("resnet")
@@ -231,6 +230,13 @@ def _space_resnet():
         "stage2_out":   ("int", 32, 192, 32),
         "stage3_out":   ("int", 32, 192, 32),
     }
+
+@register_space("disjointresnet")
+def _space_disjointresnet():
+    return {
+        "stage1_out": ("int", 32, 192, 32),
+    }
+
 
 @register_space("resnetcnn")
 def _space_resnetcnn():
@@ -471,16 +477,17 @@ def _space_autoformer1d():
         "dropout":     ("float",    0.0, 0.4, 0.1),
     }
 
+
 @register_space("patchtst")
 def _space_patchtst():
-    """Search-space para PatchTST."""
     return {
+        # Valores seguros con T=256; evita 0 parches en casi todos los casos
         "patch_len":   ("choice", [8, 16, 32]),
-        "stride":      ("choice", [4, 8, 16]),
-        "d_model":     ("int",      32, 256, 32),
+        "stride":      ("choice", [4, 8, 16]),   # sin constraints dependientes
+        "d_model":     ("int",    64, 256, 32),  # [64,96,128,160,192,224,256]
         "num_heads":   ("choice", [2, 4, 8]),
         "num_layers":  ("choice", [1, 2, 3, 4, 5, 6]),
-        "dropout":     ("float",    0.0, 0.4, 0.1),
+        "dropout":     ("float",  0.0, 0.4, 0.1),
     }
 
 @register_space("vit1d")
@@ -492,7 +499,7 @@ def _space_vit1d():
         "num_layers":  ("choice", [2, 4, 6]),
         "mlp_dim":     ("choice", [128, 256, 512]),
         "dropout":     ("float",    0.0, 0.4, 0.1),
-        "patch_size":  ("choice", [4, 8, 16, 17]),
+        "patch_size":  ("choice", [8, 16, 32]),
     }
 
 @register_space("timenet1d")
