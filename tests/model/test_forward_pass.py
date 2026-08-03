@@ -46,3 +46,27 @@ def test_model_factory_filters_unknown_kwargs_or_absorbs_via_var_kwargs(factory)
     # vez de fallar con TypeError.
     model = factory.create("mlp", {"stage1_out": 16, "unknown_param": 999})
     assert model is not None
+
+
+def test_autoformer1d_runs_under_bfloat16_autocast(factory):
+    """
+    Regresión: torch.fft.rfft/irfft no soportan bfloat16
+    (RuntimeError: "Unsupported dtype BFloat16"), y
+    utils/runtime.py::amp_config() activa bf16 automáticamente en GPUs
+    que lo soportan -- run_bohb.py entrena bajo ese autocast. Ver
+    MIGRATION_REPORT.md, hallazgo "autoformer1d" (2026-08-01) y el fix en
+    models/atbased/Autoformer1D.py::AutoCorrelationLayer.forward (fuerza
+    float32 solo para el bloque de FFT).
+
+    Se reproduce con autocast en CPU (mismo error de dtype, no requiere
+    GPU) para no depender de hardware específico en CI.
+    """
+    model = factory.create("autoformer1d", {"d_model": 32, "num_heads": 4, "num_layers": 2})
+    model.eval()
+
+    x = torch.randn(BATCH_SIZE, INPUT_CHANNELS, TIME_STEPS)
+    with torch.no_grad(), torch.autocast(device_type="cpu", dtype=torch.bfloat16):
+        out = model(x)
+
+    assert out.shape[0] == BATCH_SIZE
+    assert torch.isfinite(out.float()).all()

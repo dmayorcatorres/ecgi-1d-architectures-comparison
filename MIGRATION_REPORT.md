@@ -220,23 +220,46 @@ código muerto, externalización de config), y el bug es puramente de
 compatibilidad `torch.fft` + `bfloat16` + PyTorch 2.5.1. `autoformer1d`
 nunca se había ejecutado antes en este entorno.
 
-**Recomendación para el equipo** (no corregida en esta sesión, fuera del
-alcance autorizado): en `Autoformer1D.py`, forzar el bloque de FFT a
-`float32` antes de `torch.fft.rfft`/`irfft` y castear de vuelta después
-(patrón común: `with torch.autocast(device_type="cuda", enabled=False):
-... .float() ...`), o excluir explícitamente `autoformer1d` del autocast
-bf16 en `run_bohb.py`.
+### Corrección aplicada (2026-08-03, a pedido explícito)
+
+Se corrigió `AutoCorrelationLayer.forward()`
+(`src/models/atbased/Autoformer1D.py`): el bloque de FFT (`Qf`, `Kf`,
+`Corr` vía `rfft`/`irfft`) ahora fuerza `.float()` (float32) sobre `Q`/`K`
+antes de la FFT, y castea `Corr` de vuelta al dtype original (el de `V`)
+al terminar. El resto del forward (proyecciones lineales, softmax,
+agregación por *time-delay*) sigue corriendo en el dtype que decida el
+autocast — solo el tramo de FFT queda forzado a float32, que es lo
+mínimo necesario para evitar el `RuntimeError`.
+
+**Verificación** (sin GPU disponible en el momento del fix — ver nota
+abajo): se reprodujo el mismo error de dtype con
+`torch.autocast(device_type="cpu", dtype=torch.bfloat16)` (el error es de
+tipo, no específico de CUDA) sobre `AutoCorrelationLayer` y sobre
+`Autoformer1D` completo — ambos corren sin error tras el fix, con salida
+finita. Se agregó `tests/model/test_forward_pass.py::
+test_autoformer1d_runs_under_bfloat16_autocast` como regresión
+permanente. Suite completa: `pytest` 32/32 en verde.
+
+**Nota:** durante esta corrección, la GPU del entorno dejó de estar
+disponible (`nvidia-smi` → `Failed to initialize NVML: Driver/library
+version mismatch`) — un problema de infraestructura ajeno a este
+repositorio (posible actualización automática del driver NVIDIA en el
+sistema operativo host; normalmente se resuelve reiniciando la máquina).
+El fix se validó con la mejor evidencia disponible sin GPU (reproducción
+exacta del error de dtype en CPU); **queda pendiente una verificación
+end-to-end real de `autoformer1d` vía `run_smoke_test.sh` con GPU** en
+cuanto el entorno se recupere.
 
 ### Conclusión de la Fase 6
 
-De las **36 arquitecturas registradas, 34 se ajustan correctamente a los
-3 refactors de esta sesión y ejecutan de punta a punta** (carga →
+De las **36 arquitecturas registradas, 34 se ajustaron correctamente a
+los 3 refactors de esta sesión y ejecutaron de punta a punta** (carga →
 preprocesamiento → HPO → entrenamiento final → evaluación de métricas →
-checkpoint) sobre datos reales y GPU real. Los 2 fallos restantes
-(`resnet`, `autoformer1d`) son bugs de compatibilidad PyTorch/GPU
-**preexistentes y no relacionados con el refactor** — ambos ya estaban
-latentes antes de esta sesión y simplemente nunca se habían ejecutado en
-este entorno específico (PyTorch 2.5.1+cu121, GPU con soporte bf16).
+checkpoint) sobre datos reales y GPU real en la corrida original. De los
+2 fallos, `autoformer1d` ya fue corregido (ver arriba, pendiente de
+confirmación final en GPU); `resnet` sigue documentado como bug de
+`torch.compile`/Inductor, no corregido en esta sesión. Ninguno de los 2
+fue causado por los 3 refactors autorizados.
 Ninguno de los 3 refactors autorizados (deduplicación, eliminación de
 código muerto, externalización de config) causó ninguna de las 2
 fallas.
