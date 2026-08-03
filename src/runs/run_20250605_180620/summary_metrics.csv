@@ -1,2 +1,0 @@
-Run Folder,Dataset,Variant,MAE_mean,MAE_std,RMSE_mean,RMSE_std,MSE_mean,MSE_std,CC_mean,CC_std,MAE_inter_std,RMSE_inter_std,MSE_inter_std,CC_inter_std,num_params,FLOPs,inference_latency_ms,Model Size (MB),Best Trial
-run_20250605_180620,utah2002,patchtst,,,,,,,,,,,,,4409088,128448000.0,0.9606650000932859,16.83,"patch_len=32, stride=4, d_model=160, num_heads=4, num_layers=1, dropout=0.4, lr_patchtst=0.005021445744230614, Best Trial=patch_len=32, stride=4, d_model=160, num_heads=4, num_layers=1, dropout=0.4, lr_patchtst=0.005021445744230614"

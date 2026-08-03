@@ -1,2 +1,0 @@
-Run Folder,Dataset,Variant,MAE_mean,MAE_std,RMSE_mean,RMSE_std,MSE_mean,MSE_std,CC_mean,CC_std,MAE_inter_std,RMSE_inter_std,MSE_inter_std,CC_inter_std,num_params,FLOPs,inference_latency_ms,Model Size (MB),Best Trial
-run_20250605_210458,kitpvc,patchtst,,,,,,,,,,,,,4693024,242519040.0,15.232973000820493,17.93,"patch_len=32, stride=4, d_model=160, num_heads=8, num_layers=4, dropout=0.30000000000000004, lr_patchtst=0.004354181612293071, Best Trial=patch_len=32, stride=4, d_model=160, num_heads=8, num_layers=4, dropout=0.30000000000000004, lr_patchtst=0.004354181612293071"

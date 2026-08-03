@@ -1,2 +1,0 @@
-Run Folder,Dataset,Variant,MAE_mean,MAE_std,RMSE_mean,RMSE_std,MSE_mean,MSE_std,CC_mean,CC_std,MAE_inter_std,RMSE_inter_std,MSE_inter_std,CC_inter_std,num_params,FLOPs,inference_latency_ms,Model Size (MB),Best Trial
-run_20250605_185248,bordeaux,vit1d,,,,,,,,,,,,,255817,4279968.0,1.4028139994479716,0.99,"patch_size=10, d_model=96, num_layers=2, num_heads=8, mlp_dim=128, dropout=0.30000000000000004, lr_vit1d=0.0006776209834399438, Best Trial=patch_size=10, d_model=96, num_layers=2, num_heads=8, mlp_dim=128, dropout=0.30000000000000004, lr_vit1d=0.0006776209834399438"

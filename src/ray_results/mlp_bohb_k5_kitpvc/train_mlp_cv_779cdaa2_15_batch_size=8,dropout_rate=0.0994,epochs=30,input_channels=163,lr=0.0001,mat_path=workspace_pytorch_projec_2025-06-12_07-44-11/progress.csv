@@ -1,2 +1,0 @@
-val_loss,timestamp,checkpoint_dir_name,done,training_iteration,trial_id,date,time_this_iter_s,time_total_s,pid,hostname,node_ip,time_since_restore,iterations_since_restore
-10.35061855316162,1749714267,,False,1,779cdaa2,2025-06-12_07-44-27,6.768351078033447,6.768351078033447,571744,70e7cd3bcad5,172.17.0.2,6.768351078033447,1
