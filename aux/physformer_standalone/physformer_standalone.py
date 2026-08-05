@@ -80,7 +80,11 @@ DATASETS = {
     },
     "utah2002": {
         "path": REPO_ROOT / "src/data/utah2002/raw/utah2002.mat",
-        "fs": 2048,
+        # fs real = 1000 Hz (confirmado por el usuario, dominio clínico).
+        # OJO: el .mat trae info.sample_rate=1024 e info.filter.fs=1024,
+        # que NO coinciden con esto — se prioriza el dato clínico confirmado
+        # sobre la metadata embebida del archivo.
+        "fs": 1000,
         "keys": {"x": "emg", "y": "tag", "bspm": "ecg"}
     },
 }
