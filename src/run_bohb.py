@@ -210,6 +210,7 @@ _LR_CHOICES: Dict[str, list] = {
     "multiscalecnn":      [4e-5, 5e-4, 2e-3, 3e-3],
     "patchtst":           [4e-4, 2e-3, 5e-3],
     "peepholelstm":       [2e-3, 5e-3, 8e-3, 9e-3],
+    "physformer":         [3e-4, 5e-4, 1e-3, 2e-3],
     "qrnn":               [3e-4, 5e-4, 3e-3, 6e-3],
     "resnet":             [8e-4, 2e-3, 3e-3, 5e-3],
     "resnetcnn":          [3e-4, 9e-4, 1e-3, 2e-3],
@@ -241,9 +242,9 @@ _MODEL_FAMILY: Dict[str, str] = {
     "cnnbilstmbigrudil": "hybrid", "cnnlstm": "hybrid", "cnngru": "hybrid",
     "cnnlstmgru": "hybrid", "deepresidualbilstm": "hybrid",
     "disjointlstm": "hybrid", "lstmfcn": "hybrid",
-    # Attention (7)
+    # Attention (8)
     "alstm": "attention", "autoformer1d": "attention", "informer1d": "attention",
-    "patchtst": "attention", "timenet1d": "attention",
+    "patchtst": "attention", "physformer": "attention", "timenet1d": "attention",
     "transformer1d": "attention", "vit1d": "attention",
 }
 
@@ -327,6 +328,29 @@ def final_train(
     except Exception as exc:
         log.warning("torch.compile omitido: %s", exc)
 
+    def _forward(xb):
+        """Forward con fallback a eager si torch.compile falla en runtime.
+
+        El wrapping de torch.compile() de arriba es perezoso y casi nunca
+        falla en sí mismo; el fallo real ocurre en la primera invocación
+        real del modelo (p.ej. resnet + AdaptiveMaxPool1d + Inductor bajo
+        bfloat16, ver MIGRATION_REPORT.md). Si eso pasa, se reintenta una
+        vez en modo eager y el resto del entrenamiento sigue sin compilar.
+        """
+        nonlocal model
+        try:
+            return model(xb)
+        except Exception as exc:
+            eager = base_module(model)
+            if eager is model:
+                raise
+            log.warning(
+                "torch.compile falló en runtime (%s); reintentando en modo eager.",
+                exc,
+            )
+            model = eager
+            return model(xb)
+
     amp_      = amp_config(DEVICE)
     scaler    = GradScaler(device=DEVICE, enabled=amp_["use_scaler"])
     loss_fn   = nn.MSELoss()
@@ -374,11 +398,11 @@ def final_train(
 
             if amp_["enabled"]:
                 with autocast(device_type=DEVICE, dtype=amp_["dtype"]):
-                    pred = model(xb)
+                    pred = _forward(xb)
                     pred, yb_c = _clip_to_min_len(pred, yb)
                     loss = loss_fn(pred, yb_c)
             else:
-                pred = model(xb)
+                pred = _forward(xb)
                 pred, yb_c = _clip_to_min_len(pred, yb)
                 loss = loss_fn(pred, yb_c)
 
@@ -409,7 +433,7 @@ def final_train(
                     assert_no_nan_batch(xb, yb, tag=f"va_ep{epoch}_b{i}")
                 xb = xb.to(DEVICE, non_blocking=True)
                 yb = yb.to(DEVICE, non_blocking=True)
-                out = model(xb)
+                out = _forward(xb)
                 out, yb_c = _clip_to_min_len(out, yb)
                 va_sum += loss_fn(out, yb_c).item() * xb.size(0)
                 va_n   += xb.size(0)
@@ -471,7 +495,7 @@ def final_train(
     with torch.inference_mode():
         for xb, yb, _ in te_loader:
             xb  = xb.to(DEVICE, non_blocking=True)
-            out = model(xb).cpu()
+            out = _forward(xb).cpu()
             out, yb_c = _clip_to_min_len(out, yb)
             preds_list.append(out)
             targs_list.append(yb_c)

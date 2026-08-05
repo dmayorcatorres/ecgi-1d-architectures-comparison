@@ -87,6 +87,7 @@ from .atbased.Autoformer1D    import Autoformer1D
 from .atbased.PatchTST        import PatchTST
 from .atbased.ViT1D           import ViT1D
 from .atbased.TimeNet1D       import TimeNet1D
+from .atbased.PhysFormer      import PhysFormer
 
 # ----------------- Registro de modelos -------------------------------
 register_model("dilatedcnn", DilatedCNN)
@@ -128,6 +129,7 @@ register_model("autoformer1d", Autoformer1D)
 register_model("patchtst", PatchTST)
 register_model("vit1d", ViT1D)
 register_model("timenet1d", TimeNet1D)
+register_model("physformer", PhysFormer)
 
 # ----------------- Ejemplo de space (decorador) -----------------------
 @register_space("mlp")
@@ -509,6 +511,25 @@ def _space_timenet1d():
         "hidden_size": ("int",       32, 192, 32),
         "num_layers":  ("int",        1,   6,  1),
         "dropout":     ("float",     0.0, 0.4, 0.1),
+    }
+
+@register_space("physformer")
+def _space_physformer():
+    """
+    Search-space para PhysFormer (atención multiescala + frente
+    multiescala temporal). d_model en pasos de 32 desde 64 garantiza
+    divisibilidad exacta por cualquier num_heads de la lista (2/4/8).
+    num_layers se acota a 1-4: cada capa ya repite la atención en 3
+    escalas (MSWrapper) más el frente Inception/conv, más cara por capa
+    que transformer1d/informer1d/autoformer1d.
+    """
+    return {
+        "d_model":          ("int",    64, 256, 32),
+        "num_heads":        ("choice", [2, 4, 8]),
+        "num_layers":       ("choice", [1, 2, 3, 4]),
+        "dropout":          ("float",  0.0, 0.4, 0.1),
+        "pe_type":          ("choice", ["sin", "rope", "alibi"]),
+        "ms_type":          ("choice", ["vanilla", "inception"]),
     }
 
 @register_space("bertbigru")

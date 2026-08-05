@@ -29,6 +29,15 @@ class VSGRUNet(nn.Module):
         hidden_size = kwargs.get("hidden_size", 64)
         num_layers  = kwargs.get("num_layers", 1)
         dropout     = kwargs.get("dropout", 0.0)
+        # x==0 solo es un marcador válido de "dato ausente" en datasets que
+        # lo codifican así explícitamente. Los datasets de esta pipeline
+        # (auckland, bordeaux, ckitpvc, utah2002) son biseñales densas y
+        # completas: ~3.7% de las muestras de auckland caen exactamente en
+        # 0 por cruces por cero legítimos de la señal, no por ausencia de
+        # dato. Por eso el missingness va apagado por defecto; se puede
+        # reactivar explícitamente para un dataset que sí tenga huecos
+        # codificados como 0.
+        self.treat_zero_as_missing = kwargs.get("treat_zero_as_missing", False)
         # ----------------------------------------------------------------
 
         self.time_steps      = time_steps
@@ -85,7 +94,10 @@ class VSGRUNet(nn.Module):
         assert T == self.time_steps,     "time_steps mismatch"
 
         # 1) Máscara de observación
-        m = (x != 0).float()                            # (B,C,T)
+        if self.treat_zero_as_missing:
+            m = (x != 0).float()                        # (B,C,T)
+        else:
+            m = torch.ones_like(x)                      # todo observado
 
         # 2) Imputación simple forward-fill
         x_hat = self._forward_fill(x, m, self.x_bar)    # (B,C,T)

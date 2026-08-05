@@ -15,7 +15,7 @@ EXPECTED_FAMILIES = {
     "hybridbased": {"deepresidualbilstm", "cnnlstm", "cnngru", "cnnlstmgru",
                      "disjointlstm", "lstmfcn", "cnnbilstmbigrudil"},
     "atbased": {"alstm", "transformer1d", "informer1d", "autoformer1d",
-                "patchtst", "vit1d", "timenet1d"},
+                "patchtst", "vit1d", "timenet1d", "physformer"},
 }
 
 
@@ -25,8 +25,8 @@ def test_model_registry_contains_all_expected_variants():
     assert not missing, f"Variantes esperadas ausentes de MODEL_REGISTRY: {missing}"
 
 
-def test_model_registry_has_exactly_36_variants():
-    assert len(MODEL_REGISTRY) == 36
+def test_model_registry_has_exactly_37_variants():
+    assert len(MODEL_REGISTRY) == 37
 
 
 def test_all_registered_models_are_nn_module_subclasses():

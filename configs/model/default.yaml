@@ -10,7 +10,7 @@ common:
   input_channels: 12       # se sobrescribe en runtime con x.shape[1]
   output_channels: 256     # se sobrescribe en runtime con y.shape[1]
 
-# Familias de arquitecturas disponibles (36 variantes registradas en
+# Familias de arquitecturas disponibles (37 variantes registradas en
 # src/models/register.py). El espacio de búsqueda de hiperparámetros de
 # cada una vive en SPACE_REGISTRY y NO se duplica aquí para evitar que
 # este archivo quede desactualizado respecto al código (ver
@@ -31,7 +31,7 @@ families:
   atbased:
     module: src/models/atbased/
     variants: [alstm, transformer1d, informer1d, autoformer1d, patchtst,
-               vit1d, timenet1d]
+               vit1d, timenet1d, physformer]
 
 # Hiperparámetros comunes a todos los trials de HPO, definidos en
 # src/run_bohb.py (fuera del espacio específico de cada arquitectura).

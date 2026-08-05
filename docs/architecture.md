@@ -48,7 +48,7 @@ flowchart TB
     subgraph Models["Capa de modelos"]
         C1["models/register.py\nMODEL_REGISTRY + SPACE_REGISTRY"]
         C2["models/factory.py\nModelFactory (activo)"]
-        C4["models/cnnbased, rnnbased,\nhybridbased, atbased (36 arquitecturas)"]
+        C4["models/cnnbased, rnnbased,\nhybridbased, atbased (37 arquitecturas)"]
         C5["models/base/\nConvSEBlock, DisjointBase,\nResidualBlock, SqueezeExciteBlock"]
     end
 

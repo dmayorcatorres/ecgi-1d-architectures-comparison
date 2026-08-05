@@ -43,6 +43,12 @@ class PatchTST(nn.Module):
         self.output_channels = int(output_channels)
 
         assert self.time_steps >= patch_len, f"T({self.time_steps}) < patch_len({patch_len})"
+        # stride > patch_len deja huecos sin cubrir en el eje temporal (el
+        # modelo nunca vería esos tramos de la señal). El espacio de HPO
+        # (models/register.py::_space_patchtst) elige patch_len y stride de
+        # forma independiente, así que se acota aquí en vez de ahí.
+        if stride > patch_len:
+            stride = patch_len
         self.num_patches = (self.time_steps - patch_len) // stride + 1
         assert self.num_patches >= 1, (
             f"Config produce 0 parches: T={self.time_steps}, P={patch_len}, S={stride}"

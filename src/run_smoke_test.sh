@@ -23,13 +23,13 @@ DIRECTION="${DIRECTION:-ecg2emg}"
 NUM_SAMPLES=2
 MAX_EPOCHS=5
 
-# ── Modelos (36 en total) ─────────────────────────────────────────────────────
+# ── Modelos (37 en total) ─────────────────────────────────────────────────────
 read -r -a METHODS <<< "${METHODS:-\
   dilatedcnn disjointcnn disjointresnet fcn inceptiontime lite mlp \
   multichanneldcnn multiscalecnn resnet resnetcnn tcn tfrcnn zhaocnn \
   esn indrnn peepholelstm qrnn rnn_gru rnn_lstm tlgru vsgrunet \
   cnnbilstmbigrudil cnnlstm cnngru cnnlstmgru deepresidualbilstm disjointlstm lstmfcn \
-  alstm autoformer1d informer1d patchtst timenet1d transformer1d vit1d}"
+  alstm autoformer1d informer1d patchtst physformer timenet1d transformer1d vit1d}"
 
 LOG_DIR="batch_logs/smoke_${DIRECTION}"
 mkdir -p "${LOG_DIR}"
