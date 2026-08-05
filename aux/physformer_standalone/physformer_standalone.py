@@ -29,7 +29,6 @@ from pathlib import Path
 from collections import defaultdict
 from typing import List, Tuple, Optional, Dict, Union, Any, Callable
 import argparse
-import csv
 import math
 import os
 import time
@@ -444,6 +443,24 @@ class ECGDataset(Dataset):
         if isinstance(_unwrap_mat_struct(heart_obj), dict) and \
            not any(k in _unwrap_mat_struct(heart_obj) for k in ['elec','electrodes','idx','indices']):
             print("[aviso] 'heart' no trae mapping 'elec'. Asumo canales ↔ primeros nodos (0..Cx-1).")
+
+        # Si la malla NO está a resolución de electrodo (nodos != canales
+        # reales), "primeros N nodos" es una suposición sin verificar, no un
+        # mapeo — las distancias torso↔corazón que alimentan PhysicsMixer
+        # dejan de ser confiables. Cuando la malla coincide 1:1 con los
+        # canales (bordeaux/auckland), el fallback es exacto y no es una
+        # suposición. ckitpvc y utah2002 caen en el primer caso.
+        self.has_reliable_geometry = (
+            self.torso_nodes.shape[0] == Ce and self.heart_nodes.shape[0] == Cx
+        )
+        if not self.has_reliable_geometry:
+            print(
+                f"[aviso] malla NO está a resolución de electrodo "
+                f"(torso: {self.torso_nodes.shape[0]} nodos vs Ce={Ce}; "
+                f"corazón: {self.heart_nodes.shape[0]} nodos vs Cx={Cx}) — "
+                f"el mapeo electrodo↔nodo asumido no está verificado. "
+                f"PhysicsMixer se desactiva por defecto para este dataset."
+            )
 
         if len(self.ecg_ids) != Ce:
             print(f"[aviso] ecg_ids({len(self.ecg_ids)}) != Ce({Ce}) → recorto.")
@@ -1351,24 +1368,37 @@ def _fmt_lr(lr: float) -> str:
     return f"{lr:.0e}".replace("+", "")
 
 def _append_metrics_csv(csv_path: Path, row: Dict[str, Any]):
-    """Agrega `row` a metrics_standalone.csv (lo crea con header si no existe)."""
+    """
+    Agrega `row` a metrics_standalone.csv (lo crea si no existe). Usa
+    pandas para tolerar columnas nuevas entre corridas (ya pasó dos veces:
+    se agregó "direction" y luego "physics_enabled") — un csv.DictWriter
+    con fieldnames fijos rompe el archivo si el header no coincide.
+    """
+    import pandas as pd
     csv_path.parent.mkdir(parents=True, exist_ok=True)
-    write_header = not csv_path.exists()
-    with open(csv_path, "a", newline="") as f:
-        writer = csv.DictWriter(f, fieldnames=list(row.keys()))
-        if write_header:
-            writer.writeheader()
-        writer.writerow(row)
+    new_row = pd.DataFrame([row])
+    if csv_path.exists():
+        df = pd.read_csv(csv_path)
+        df = pd.concat([df, new_row], ignore_index=True)
+    else:
+        df = new_row
+    df.to_csv(csv_path, index=False)
 
 def run_basic_training(mat_path: Path, keys: dict, epochs: int = 20, batch_size: int = 8,
                        lr: float = 1e-3, d_model: int = 128, num_heads: int = 4, num_layers: int = 4,
                        dropout: float = 0.1, split_ratio: float = 0.7, seed: int = 125,
                        apply_filter: bool = True, use_torch_compile: bool = False,
                        dataset_name: str = "dataset", output_dir: Optional[Path] = None,
-                       direction: str = "emg2ecg", sample_rate: Optional[float] = None):
+                       direction: str = "emg2ecg", sample_rate: Optional[float] = None,
+                       use_physics: Optional[bool] = None):
     """
     Entrena Transformer1D + rama física con regularizadores geométricos
     y la restricción de conducción (RMS_torso <= κ · A @ RMS_corazón).
+
+    use_physics: si es None (default), se auto-detecta a partir de
+    full_ds.has_reliable_geometry (False cuando la malla de torso/corazón
+    no está a resolución de electrodo — ver ECGDataset.__init__). Pasar
+    True/False fuerza el comportamiento explícitamente.
 
     direction:
       - "emg2ecg" (default del notebook original): entrada=corazón (emg),
@@ -1441,21 +1471,28 @@ def run_basic_training(mat_path: Path, keys: dict, epochs: int = 20, batch_size:
     if use_torch_compile and hasattr(torch, "compile"):
         model = torch.compile(model)
 
-    phys = PhysicsMixer(B_rbf_in, D_ht_in, topk=16, bias_scale_init=0.05,
-                        prior_mode="sigma0", rbf_temperature=0.3, dist_p=1.0)
+    phys_enabled = full_ds.has_reliable_geometry if use_physics is None else use_physics
+    if phys_enabled:
+        phys = PhysicsMixer(B_rbf_in, D_ht_in, topk=16, bias_scale_init=0.05,
+                            prior_mode="sigma0", rbf_temperature=0.3, dist_p=1.0)
+    else:
+        phys = None
+        print(f"[aviso] PhysicsMixer desactivado para {dataset_name} "
+              f"(geometría de electrodos no verificada, ver aviso arriba).")
 
-    lambda_phys     = 0.2
+    lambda_phys     = 0.2 if phys_enabled else 0.0
     lambda_lap      = 0.0
-    lambda_geo_kl   = 0.05
-    lambda_geo_dist = 0.02
-    lambda_cond     = 0.1
+    lambda_geo_kl   = 0.05 if phys_enabled else 0.0
+    lambda_geo_dist = 0.02 if phys_enabled else 0.0
+    lambda_cond     = 0.1 if phys_enabled else 0.0
     kappa_cond      = 1.0
     win_cond        = 17
 
     L_torso = L_target  # lambda_lap=0.0 abajo, así que este término está inactivo de todas formas
 
     decay, no_decay = [], []
-    for n, p in list(model.named_parameters()) + list(phys.named_parameters()):
+    phys_params = list(phys.named_parameters()) if phys is not None else []
+    for n, p in list(model.named_parameters()) + phys_params:
         (no_decay if (p.ndim==1 or n.endswith('bias')) else decay).append(p)
     opt = torch.optim.AdamW([
         {'params': decay, 'weight_decay': 1e-3},
@@ -1482,9 +1519,10 @@ def run_basic_training(mat_path: Path, keys: dict, epochs: int = 20, batch_size:
     t_start = time.time()
     for ep in range(1, epochs + 1):
         # warmup de la escala de sesgo de la rama física
-        t = min(max(ep, 0) / float(warmup_epochs), 1.0)
-        with torch.no_grad():
-            phys.bias_scale.copy_(torch.tensor(max(1e-6, t * warmup_target), device=phys.bias_scale.device, dtype=phys.bias_scale.dtype))
+        if phys is not None:
+            t = min(max(ep, 0) / float(warmup_epochs), 1.0)
+            with torch.no_grad():
+                phys.bias_scale.copy_(torch.tensor(max(1e-6, t * warmup_target), device=phys.bias_scale.device, dtype=phys.bias_scale.dtype))
 
         tr_loss = train_one_epoch(
             model, train_loader, opt, DEVICE, scaler=scaler, grad_clip=1.0,
@@ -1505,10 +1543,11 @@ def run_basic_training(mat_path: Path, keys: dict, epochs: int = 20, batch_size:
         )
         scheduler.step(val_metrics["loss"])
 
+        bias_scale_str = f"{phys.bias_scale.item():.3f}" if phys is not None else "n/a"
         print(f"[{ep:03d}] train_loss={tr_loss:.4f} | "
               f"val_loss={val_metrics['loss']:.4f}  rmse={val_metrics['rmse']:.4f}  "
               f"pcc={val_metrics['pcc']:.4f}  lr={opt.param_groups[0]['lr']:.3e}  "
-              f"bias_scale={phys.bias_scale.item():.3f}")
+              f"bias_scale={bias_scale_str}")
 
         if val_metrics["loss"] < best_val - 1e-6:
             best_val = val_metrics["loss"]
@@ -1517,7 +1556,7 @@ def run_basic_training(mat_path: Path, keys: dict, epochs: int = 20, batch_size:
                             "pcc":  val_metrics["pcc"]}
             torch.save({
                 "state_dict": model.state_dict(),
-                "phys_state_dict": phys.state_dict(),
+                "phys_state_dict": phys.state_dict() if phys is not None else None,
                 "config": dict(
                     T=T, Cin=Cin, Cout=Cout, d_model=d_model,
                     num_heads=num_heads, num_layers=num_layers, dropout=dropout,
@@ -1535,6 +1574,7 @@ def run_basic_training(mat_path: Path, keys: dict, epochs: int = 20, batch_size:
     _append_metrics_csv(OUTPUT_ROOT / "metrics_standalone.csv", {
         "dataset": dataset_name,
         "direction": direction,
+        "physics_enabled": phys_enabled,
         "lr": lr,
         "seed": seed,
         "epochs": epochs,
@@ -1582,9 +1622,16 @@ def main():
     p.add_argument("--apply-filter", dest="apply_filter", action="store_true", default=True)
     p.add_argument("--no-apply-filter", dest="apply_filter", action="store_false")
     p.add_argument("--use-torch-compile", action="store_true", default=False)
+    p.add_argument("--use-physics", choices=["auto", "on", "off"], default="auto",
+                    help="auto (default): activa PhysicsMixer solo si la malla de "
+                         "torso/corazón coincide 1:1 con los canales reales "
+                         "(bordeaux/auckland). En ckitpvc/utah2002 la malla no "
+                         "está a resolución de electrodo, así que 'auto' la "
+                         "desactiva ahí. 'on'/'off' fuerzan el comportamiento.")
     p.add_argument("--inspect", action="store_true",
                     help="Solo corre run_inspection() (shapes/keys/geometría) y sale.")
     args = p.parse_args()
+    use_physics = {"auto": None, "on": True, "off": False}[args.use_physics]
 
     if args.inspect:
         run_inspection()
@@ -1613,6 +1660,7 @@ def main():
             output_dir=OUTPUT_ROOT / name / args.direction,
             direction=args.direction,
             sample_rate=info.get("fs"),
+            use_physics=use_physics,
         )
 
 
