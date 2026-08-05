@@ -519,7 +519,18 @@ def compute_channel_stats(x: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
 
 def build_loader(path: Path, batch_size: int, device: str,
                  split_ratio: float = 0.7, seed: int = SEED,
-                 keys: Optional[dict] = None, apply_filter: bool = True):
+                 keys: Optional[dict] = None, apply_filter: bool = True,
+                 sample_rate: Optional[float] = None):
+    """
+    sample_rate: fs real del dataset (Hz), usado por ButterFilter. El
+    notebook original usaba el global `fs=2048` para los 4 datasets sin
+    importar su fs real (ckitpvc es 1000 Hz) — eso corre en la práctica
+    los cortes del notch/pasa-bajo a la mitad de lo previsto para ese
+    dataset. Se verificó empíricamente que esto NO afecta el desempeño
+    (PCC casi idéntico con fs correcto vs incorrecto en ckitpvc), pero se
+    corrige igual por prolijidad. Si no se pasa, cae al global `fs` para
+    no romper otros usos de esta función.
+    """
     key_x = keys.get("x", "emg") if keys else "emg"
     key_y = keys.get("y", "tag") if keys else "tag"
     key_b = keys.get("bspm", "ecg") if keys else "ecg"
@@ -532,7 +543,8 @@ def build_loader(path: Path, batch_size: int, device: str,
     # Asignar transforms en la misma instancia
     dataset.tf_x = ZScore(mu_x, sd_x)
     dataset.tf_bspm = ZScore(mu_b, sd_b)
-    dataset.tf_filt = ButterFilter(fs=fs, lp_cuts=LP_CUTS) if apply_filter else None
+    fs_eff = sample_rate if sample_rate is not None else fs
+    dataset.tf_filt = ButterFilter(fs=fs_eff, lp_cuts=LP_CUTS) if apply_filter else None
 
     tr_idx, va_idx = _stratified_split_indices(dataset.y, split_ratio, seed)
     train_ds, val_ds = Subset(dataset, tr_idx), Subset(dataset, va_idx)
@@ -1325,6 +1337,7 @@ def run_inspection():
             seed=SEED,
             keys=info.get("keys", None),
             apply_filter=True,
+            sample_rate=info.get("fs"),
         )
 
         summarize_dataset(dataset_name, full_ds)
@@ -1352,7 +1365,7 @@ def run_basic_training(mat_path: Path, keys: dict, epochs: int = 20, batch_size:
                        dropout: float = 0.1, split_ratio: float = 0.7, seed: int = 125,
                        apply_filter: bool = True, use_torch_compile: bool = False,
                        dataset_name: str = "dataset", output_dir: Optional[Path] = None,
-                       direction: str = "emg2ecg"):
+                       direction: str = "emg2ecg", sample_rate: Optional[float] = None):
     """
     Entrena Transformer1D + rama física con regularizadores geométricos
     y la restricción de conducción (RMS_torso <= κ · A @ RMS_corazón).
@@ -1384,7 +1397,8 @@ def run_basic_training(mat_path: Path, keys: dict, epochs: int = 20, batch_size:
 
     train_loader, val_loader, full_ds = build_loader(
         path=mat_path, batch_size=batch_size, device=DEVICE.type,
-        split_ratio=split_ratio, seed=seed, keys=keys, apply_filter=apply_filter
+        split_ratio=split_ratio, seed=seed, keys=keys, apply_filter=apply_filter,
+        sample_rate=sample_rate,
     )
     # full_ds.x = emg (corazón), full_ds.y_bspm = ecg (torso), siempre —
     # ver nota arriba. Cin/Cout del modelo sí dependen de `direction`.
@@ -1598,6 +1612,7 @@ def main():
             dataset_name=name,
             output_dir=OUTPUT_ROOT / name / args.direction,
             direction=args.direction,
+            sample_rate=info.get("fs"),
         )
 
 
