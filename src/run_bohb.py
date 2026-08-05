@@ -210,7 +210,7 @@ _LR_CHOICES: Dict[str, list] = {
     "multiscalecnn":      [4e-5, 5e-4, 2e-3, 3e-3],
     "patchtst":           [4e-4, 2e-3, 5e-3],
     "peepholelstm":       [2e-3, 5e-3, 8e-3, 9e-3],
-    "physformer":         [3e-4, 5e-4, 1e-3, 2e-3],
+    "physformer":         [3e-4, 5e-4, 1e-3, 2e-3, 3e-3, 5e-3],
     "qrnn":               [3e-4, 5e-4, 3e-3, 6e-3],
     "resnet":             [8e-4, 2e-3, 3e-3, 5e-3],
     "resnetcnn":          [3e-4, 9e-4, 1e-3, 2e-3],

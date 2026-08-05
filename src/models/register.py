@@ -518,14 +518,29 @@ def _space_physformer():
     """
     Search-space para PhysFormer (atención multiescala + frente
     multiescala temporal). d_model en pasos de 32 desde 64 garantiza
-    divisibilidad exacta por cualquier num_heads de la lista (2/4/8).
-    num_layers se acota a 1-4: cada capa ya repite la atención en 3
-    escalas (MSWrapper) más el frente Inception/conv, más cara por capa
-    que transformer1d/informer1d/autoformer1d.
+    divisibilidad exacta por cualquier num_heads de la lista (2/4/8/16,
+    ya que 32 es múltiplo de 16). num_layers se acota a 1-4: cada capa ya
+    repite la atención en 3 escalas (MSWrapper) más el frente
+    Inception/conv, más cara por capa que transformer1d/informer1d/
+    autoformer1d.
+
+    2026-08-05: se probó ampliar TODO el espacio (d_model hasta 320,
+    num_layers hasta 6) + subir num_samples 15→20, y empeoró el resultado
+    en los 4 datasets (ej. bordeaux PCC 0.911→0.812, auckland 0.922→0.877).
+    Con solo 20 trials, un espacio ~2x más grande no alcanza a explorarse
+    bien — BOHB/Hyperband poda agresivamente en las primeras épocas, lo que
+    penaliza configs más grandes/lentas en converger que aún no muestran su
+    verdadero desempeño temprano. Se revirtió d_model/num_layers al rango
+    original; `num_heads=16` se deja (agregado sin costo real: es solo una
+    opción categórica más, no un eje continuo que diluya el presupuesto).
+    Lo único que sí se deja ampliado es `lr` (ver run_bohb.py::_LR_CHOICES):
+    BOHB eligió el valor más alto disponible en 6/6 corridas registradas
+    antes de este cambio — señal inequívoca de tope, a diferencia de
+    d_model/num_layers donde no había evidencia de estar topados.
     """
     return {
         "d_model":          ("int",    64, 256, 32),
-        "num_heads":        ("choice", [2, 4, 8]),
+        "num_heads":        ("choice", [2, 4, 8, 16]),
         "num_layers":       ("choice", [1, 2, 3, 4]),
         "dropout":          ("float",  0.0, 0.4, 0.1),
         "pe_type":          ("choice", ["sin", "rope", "alibi"]),

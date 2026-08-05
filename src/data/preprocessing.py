@@ -16,6 +16,24 @@ def _sha1(path: Path) -> str:
             sha1.update(data)
     return sha1.hexdigest()[:8]
 
+def _ensure_nct(t: torch.Tensor) -> torch.Tensor:
+    """
+    Estandariza a (N, canales, tiempo). No todos los .mat crudos guardan las
+    señales en ese orden: ckitpvc/utah2002 vienen como (N, tiempo, canales),
+    mientras que bordeaux/auckland ya están en (N, canales, tiempo). Se
+    asume que el eje de canales es el más chico de los dos últimos — mismo
+    criterio que ECGDataset._ensure_nct en physformer1.0.ipynb /
+    aux/physformer_standalone/physformer_standalone.py. Sin esto, para
+    ckitpvc/utah2002 se entrena/evalúa con canales y tiempo intercambiados
+    (ver docs/architecture.md o el hallazgo de la comparación PhysFormer
+    standalone-vs-pipeline).
+    """
+    if t.ndim == 2:
+        return t.unsqueeze(1)
+    if t.shape[1] > t.shape[2]:
+        return t.transpose(1, 2).contiguous()
+    return t
+
 def load_mat_cached(mat_path: Path, time_steps: int, key_x="emg", key_y="tag", key_bspm="ecg") -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
     cache = mat_path.with_suffix(f".T{time_steps}.labels.{_sha1(mat_path)}.pt")
     if cache.exists():
@@ -30,6 +48,8 @@ def load_mat_cached(mat_path: Path, time_steps: int, key_x="emg", key_y="tag", k
 
     ecg = torch.as_tensor(d[key_bspm]).float()
     emg = torch.as_tensor(d[key_x]).float()
+    ecg = _ensure_nct(ecg)
+    emg = _ensure_nct(emg)
     # Sanea posibles no finitos
     ecg = torch.nan_to_num(ecg)
     emg = torch.nan_to_num(emg)
