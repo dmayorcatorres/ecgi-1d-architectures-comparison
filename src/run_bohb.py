@@ -72,6 +72,8 @@ from models.factory import ModelFactory
 from models.register import MODEL_REGISTRY, SPACE_REGISTRY
 from hpo.adapters import space_to_tune
 from data.datamodule import ECGDataModule
+from data.geometry import load_geometry
+from data.filtering import load_filtered, DATASET_FS, DATASET_LP_CUT
 from utils.metrics import ECGMetricsCalculator
 from utils.early_stopping import EarlyStopping
 from utils.runtime import setup_torch_runtime, amp_config, set_seed, base_module, free_all
@@ -260,10 +262,20 @@ _FAMILY_CFG: Dict[str, Dict] = {
 def _make_optimizer(model: nn.Module, lr: float, weight_decay: float) -> optim.AdamW:
     """
     AdamW con dos grupos: sin weight_decay para BN/LN y biases (Loshchilov 2019).
+
+    Excluye "combiner.*" (PhysMixFormer1D.combiner, los log-vars de
+    UncertaintyWeightedCombiner) -- ese submódulo tiene su propio
+    optimizador SGD dedicado (ver final_train/train_holdout), porque bajo
+    AdamW compartido la normalización por segundo momento anula la
+    diferenciación por escala que hace útil la ponderación por
+    incertidumbre. No-op para el resto de arquitecturas (no tienen
+    submódulo "combiner").
     """
     decay, no_decay = [], []
     for name, param in model.named_parameters():
         if not param.requires_grad:
+            continue
+        if name.startswith("combiner."):
             continue
         if param.ndim <= 1 or name.endswith(".bias"):
             no_decay.append(param)
@@ -278,6 +290,15 @@ def _make_optimizer(model: nn.Module, lr: float, weight_decay: float) -> optim.A
     )
 
 
+def _clip_grad_norm_excluding_combiner(model: nn.Module, max_norm: float) -> None:
+    """torch.nn.utils.clip_grad_norm_ que excluye "combiner.*" (ver
+    _make_optimizer) -- el standalone validado no aplica grad-clip del
+    modelo a los log-vars de incertidumbre (escalas distintas). No-op
+    para el resto de arquitecturas."""
+    params = [p for n, p in model.named_parameters() if not n.startswith("combiner.")]
+    torch.nn.utils.clip_grad_norm_(params, max_norm)
+
+
 # ═════════════════════════ Entrenamiento final ════════════════════════════════
 
 def final_train(
@@ -290,6 +311,7 @@ def final_train(
     ds_name:     str,
     metrics_log: Path,
     save_curves: bool = False,
+    geometry=None,
 ) -> None:
     """
     Entrena el modelo con la mejor configuración HPO y evalúa en el test held-out.
@@ -317,6 +339,9 @@ def final_train(
 
     params    = {k: v for k, v in cfg.items() if k not in _NONMODEL_KEYS}
     model     = factory.create(cfg["variant"], params).to(DEVICE)
+    composite = getattr(model, "USES_COMPOSITE_LOSS", False)
+    if composite and geometry is not None:
+        model.attach_geometry(geometry)
 
     handles: list = []
     if SANITY_CHECKS:
@@ -359,19 +384,38 @@ def final_train(
     fcfg          = _FAMILY_CFG[family]
     optimizer     = _make_optimizer(model, cfg["lr"], cfg["weight_decay"])
 
+    # Optimizador SGD dedicado para los log-vars de incertidumbre de
+    # PhysMixFormer1D -- separado del AdamW del modelo (ver
+    # UncertaintyWeightedCombiner en PhysMixFormer1D.py: bajo AdamW
+    # compartido la normalización por segundo momento anula la
+    # diferenciación por escala que hace útil la ponderación).
+    uncertainty_opt = torch.optim.SGD(model.uncertainty_parameters(), lr=0.02) \
+                       if composite else None
+
     max_epochs    = int(cfg.get("epochs", 50))
     warmup_epochs = max(1, round(max_epochs * fcfg["warmup_ratio"]))
 
-    # Warmup lineal + CosineAnnealingLR — estándar moderno para convergencia estable
-    warmup    = optim.lr_scheduler.LinearLR(
-        optimizer, start_factor=0.1, end_factor=1.0, total_iters=warmup_epochs
-    )
-    cosine    = optim.lr_scheduler.CosineAnnealingLR(
-        optimizer, T_max=max(1, max_epochs - warmup_epochs), eta_min=1e-6
-    )
-    scheduler = optim.lr_scheduler.SequentialLR(
-        optimizer, schedulers=[warmup, cosine], milestones=[warmup_epochs]
-    )
+    if composite:
+        # ReduceLROnPlateau -- mismo schedule que
+        # physmixformer_standalone_v3.py::run_basic_training (factor=0.5,
+        # patience=5, min_lr=5e-5), en vez del warmup+cosine genérico del
+        # resto del pipeline. Adaptativo a val_loss real, no a un
+        # cronograma fijo de épocas -- así entrena en igualdad de
+        # condiciones con el standalone.
+        scheduler = optim.lr_scheduler.ReduceLROnPlateau(
+            optimizer, mode="min", factor=0.5, patience=5, min_lr=5e-5
+        )
+    else:
+        # Warmup lineal + CosineAnnealingLR — estándar moderno para convergencia estable
+        warmup    = optim.lr_scheduler.LinearLR(
+            optimizer, start_factor=0.1, end_factor=1.0, total_iters=warmup_epochs
+        )
+        cosine    = optim.lr_scheduler.CosineAnnealingLR(
+            optimizer, T_max=max(1, max_epochs - warmup_epochs), eta_min=1e-6
+        )
+        scheduler = optim.lr_scheduler.SequentialLR(
+            optimizer, schedulers=[warmup, cosine], milestones=[warmup_epochs]
+        )
 
     # EarlyStopping sobre val_loss; min_delta=1e-4 evita paradas por ruido numérico
     es = EarlyStopping(patience=fcfg["patience_final"], min_delta=1e-4, verbose=False)
@@ -387,6 +431,8 @@ def final_train(
 
     for epoch in range(max_epochs):
         # ── Fase train ───────────────────────────────────────────
+        if composite:
+            model.anneal_epoch(epoch + 1, max_epochs)
         model.train()
         tr_sum, tr_n = 0.0, 0
         for i, (xb, yb, _) in enumerate(tr_loader):
@@ -395,27 +441,42 @@ def final_train(
             xb = xb.to(DEVICE, non_blocking=True)
             yb = yb.to(DEVICE, non_blocking=True)
             optimizer.zero_grad(set_to_none=True)
+            if uncertainty_opt is not None:
+                uncertainty_opt.zero_grad(set_to_none=True)
 
             if amp_["enabled"]:
                 with autocast(device_type=DEVICE, dtype=amp_["dtype"]):
+                    if composite:
+                        pred, Pi, _ = _forward(xb)
+                        loss = model.compute_loss(pred, yb, xb, Pi=Pi)
+                    else:
+                        pred = _forward(xb)
+                        pred, yb_c = _clip_to_min_len(pred, yb)
+                        loss = loss_fn(pred, yb_c)
+            else:
+                if composite:
+                    pred, Pi, _ = _forward(xb)
+                    loss = model.compute_loss(pred, yb, xb, Pi=Pi)
+                else:
                     pred = _forward(xb)
                     pred, yb_c = _clip_to_min_len(pred, yb)
                     loss = loss_fn(pred, yb_c)
-            else:
-                pred = _forward(xb)
-                pred, yb_c = _clip_to_min_len(pred, yb)
-                loss = loss_fn(pred, yb_c)
 
             if amp_["use_scaler"]:
                 scaler.scale(loss).backward()
                 scaler.unscale_(optimizer)
-                torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
+                _clip_grad_norm_excluding_combiner(model, 1.0)
                 scaler.step(optimizer)
+                if uncertainty_opt is not None:
+                    scaler.unscale_(uncertainty_opt)
+                    scaler.step(uncertainty_opt)
                 scaler.update()
             else:
                 loss.backward()
-                torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
+                _clip_grad_norm_excluding_combiner(model, 1.0)
                 optimizer.step()
+                if uncertainty_opt is not None:
+                    uncertainty_opt.step()
 
             tr_sum += loss.item() * xb.size(0)
             tr_n   += xb.size(0)
@@ -433,16 +494,23 @@ def final_train(
                     assert_no_nan_batch(xb, yb, tag=f"va_ep{epoch}_b{i}")
                 xb = xb.to(DEVICE, non_blocking=True)
                 yb = yb.to(DEVICE, non_blocking=True)
-                out = _forward(xb)
-                out, yb_c = _clip_to_min_len(out, yb)
-                va_sum += loss_fn(out, yb_c).item() * xb.size(0)
+                if composite:
+                    out, Pi, _ = _forward(xb)
+                    va_sum += model.compute_loss(out, yb, xb, Pi=Pi).item() * xb.size(0)
+                else:
+                    out = _forward(xb)
+                    out, yb_c = _clip_to_min_len(out, yb)
+                    va_sum += loss_fn(out, yb_c).item() * xb.size(0)
                 va_n   += xb.size(0)
         val_loss = va_sum / max(va_n, 1)
         if save_curves:
             val_losses.append(val_loss)
 
         # Actualizar schedule una vez por época (epoch-based)
-        scheduler.step()
+        if composite:
+            scheduler.step(val_loss)  # ReduceLROnPlateau necesita la métrica
+        else:
+            scheduler.step()
         lr_now = optimizer.param_groups[0]["lr"]
 
         # Checkpoint del mejor estado según val_loss
@@ -495,7 +563,10 @@ def final_train(
     with torch.inference_mode():
         for xb, yb, _ in te_loader:
             xb  = xb.to(DEVICE, non_blocking=True)
-            out = _forward(xb).cpu()
+            out = _forward(xb)
+            if composite:
+                out = out[0]
+            out = out.cpu()
             out, yb_c = _clip_to_min_len(out, yb)
             preds_list.append(out)
             targs_list.append(yb_c)
@@ -515,6 +586,11 @@ def final_train(
     # ── Perfil del modelo ─────────────────────────────────────────
     sample        = next(iter(te_loader))[0][:1].to(DEVICE, non_blocking=True)
     profile_model = factory.create(cfg["variant"], params).to(DEVICE)
+    if composite and geometry is not None:
+        # best_state trae las claves de los buffers/parámetros de geometría
+        # (P_torso, P_epi, coupling.logits, etc.) -- sin adjuntarla aquí
+        # también, load_state_dict(strict=True) falla por claves inesperadas.
+        profile_model.attach_geometry(geometry)
     profile_model.load_state_dict(best_state, strict=True)
     n_p, lat, flops, macs = compute_model_stats(profile_model, sample, device=DEVICE)
     print(f"\n  Parámetros           : {n_p:,}")
@@ -591,6 +667,14 @@ def run_pipeline(
     train_idx_ref = ray.put(train_idx)
     val_idx_ref   = ray.put(val_idx)
 
+    # Geometría de malla torso/corazón (PhysMixFormer1D/"physformer"): se
+    # computa una sola vez por dataset (no por trial) y se comparte vía el
+    # object store, igual que ds_ref/train_idx_ref/val_idx_ref. None si el
+    # dataset no tiene geometría confiable -- ver data/geometry.py.
+    geometry     = load_geometry(mat_path, data_cfg.input_channels, data_cfg.output_channels) \
+                   if variant == "physformer" else None
+    geometry_ref = ray.put(geometry)
+
     # ── Espacio de búsqueda BOHB ──────────────────────────────────
     spec = SPACE_REGISTRY[variant]
     spec = spec() if callable(spec) else spec
@@ -634,42 +718,66 @@ def run_pipeline(
 
         params    = {k: v for k, v in cfg.items() if k not in _NONMODEL_KEYS}
         model     = factory.create(cfg["variant"], params).to(DEVICE)
+        composite = getattr(model, "USES_COMPOSITE_LOSS", False)
+        if composite:
+            geom = ray.get(geometry_ref)
+            if geom is not None:
+                model.attach_geometry(geom)
         amp_      = amp_config(DEVICE)
         scaler    = GradScaler(device=DEVICE, enabled=amp_["use_scaler"])
         loss_fn   = nn.MSELoss()
         optimizer = _make_optimizer(model, cfg["lr"], cfg["weight_decay"])
+        uncertainty_opt = torch.optim.SGD(model.uncertainty_parameters(), lr=0.02) \
+                           if composite else None
         family    = _MODEL_FAMILY.get(cfg["variant"], "cnn")
         es        = EarlyStopping(patience=_FAMILY_CFG[family]["patience_hpo"],
                                   min_delta=1e-4, verbose=False)
 
         for epoch in range(cfg["epochs"]):
             # ── train ──
+            if composite:
+                model.anneal_epoch(epoch + 1, cfg["epochs"])
             model.train()
             for xb, yb, _ in tr_loader:
                 xb = xb.to(DEVICE, non_blocking=True)
                 yb = yb.to(DEVICE, non_blocking=True)
                 optimizer.zero_grad(set_to_none=True)
+                if uncertainty_opt is not None:
+                    uncertainty_opt.zero_grad(set_to_none=True)
 
                 if amp_["enabled"]:
                     with autocast(device_type=DEVICE, dtype=amp_["dtype"]):
+                        if composite:
+                            pred, Pi, _ = model(xb)
+                            loss = model.compute_loss(pred, yb, xb, Pi=Pi)
+                        else:
+                            pred = model(xb)
+                            pred, yb_c = _clip_to_min_len(pred, yb)
+                            loss = loss_fn(pred, yb_c)
+                else:
+                    if composite:
+                        pred, Pi, _ = model(xb)
+                        loss = model.compute_loss(pred, yb, xb, Pi=Pi)
+                    else:
                         pred = model(xb)
                         pred, yb_c = _clip_to_min_len(pred, yb)
                         loss = loss_fn(pred, yb_c)
-                else:
-                    pred = model(xb)
-                    pred, yb_c = _clip_to_min_len(pred, yb)
-                    loss = loss_fn(pred, yb_c)
 
                 if amp_["use_scaler"]:
                     scaler.scale(loss).backward()
                     scaler.unscale_(optimizer)
-                    torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
+                    _clip_grad_norm_excluding_combiner(model, 1.0)
                     scaler.step(optimizer)
+                    if uncertainty_opt is not None:
+                        scaler.unscale_(uncertainty_opt)
+                        scaler.step(uncertainty_opt)
                     scaler.update()
                 else:
                     loss.backward()
-                    torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
+                    _clip_grad_norm_excluding_combiner(model, 1.0)
                     optimizer.step()
+                    if uncertainty_opt is not None:
+                        uncertainty_opt.step()
 
             # ── val ──
             model.eval()
@@ -678,9 +786,13 @@ def run_pipeline(
                 for xb, yb, _ in va_loader:
                     xb = xb.to(DEVICE, non_blocking=True)
                     yb = yb.to(DEVICE, non_blocking=True)
-                    out = model(xb)
-                    out, yb_c = _clip_to_min_len(out, yb)
-                    va_sum += loss_fn(out, yb_c).item() * xb.size(0)
+                    if composite:
+                        out, Pi, _ = model(xb)
+                        va_sum += model.compute_loss(out, yb, xb, Pi=Pi).item() * xb.size(0)
+                    else:
+                        out = model(xb)
+                        out, yb_c = _clip_to_min_len(out, yb)
+                        va_sum += loss_fn(out, yb_c).item() * xb.size(0)
                     va_n   += xb.size(0)
             val_loss = va_sum / max(va_n, 1)
 
@@ -728,6 +840,7 @@ def run_pipeline(
         ds_name=ds_name,
         metrics_log=metrics_log,
         save_curves=save_curves,
+        geometry=geometry,
     )
 
 
@@ -764,8 +877,9 @@ if __name__ == "__main__":
         raise FileNotFoundError(f"Dataset '{args.dataset}' no encontrado en {mat}")
 
     # ── Carga única del dataset ───────────────────────────────────
+    PIPELINE_TIME_STEPS = 256
     dm0 = ECGDataModule(
-        str(mat), batch_size=1, time_steps=256,
+        str(mat), batch_size=1, time_steps=PIPELINE_TIME_STEPS,
         num_workers=2, train_frac=1.0, direction=args.direction,
     )
     dm0.prepare_data()
@@ -774,6 +888,20 @@ if __name__ == "__main__":
         raise ValueError("No se pudieron cargar las etiquetas del dataset.")
 
     x, y, labels = dm0.x, dm0.y, dm0.labels
+
+    # "physformer" (PhysMixFormer1D): filtro Butterworth aplicado a la señal
+    # cruda antes del PAA (ver data/filtering.py) -- el resto de las 36
+    # arquitecturas siguen sin filtrar, sin cambios de comportamiento.
+    if args.method.lower() == "physformer" and args.dataset in DATASET_FS:
+        ecg_f, emg_f, labels_f = load_filtered(mat, PIPELINE_TIME_STEPS, args.dataset)
+        if args.direction.lower() == "ecg2emg":
+            x, y = ecg_f, emg_f
+        else:
+            x, y = emg_f, ecg_f
+        labels = labels_f
+        print(f"[physformer] filtro Butterworth aplicado (fs={DATASET_FS[args.dataset]} Hz, "
+              f"lp_cut={DATASET_LP_CUT[args.dataset]} Hz) antes del PAA.")
+
     N = len(labels)
     unique, counts = torch.unique(labels, return_counts=True)
     print(f"Dataset cargado: {N} muestras  |  "

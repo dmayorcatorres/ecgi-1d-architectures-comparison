@@ -23,6 +23,7 @@ reports/results/
 reports/tables/
 models/checkpoints/
 models/exported/
+aux/backup_pre_rerun/
 
 # Excepciones explícitas: estos SÍ deben versionarse pese a los patrones de
 # arriba (documentación, plantillas, registro de experimentos vacío/ejemplo).

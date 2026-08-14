@@ -87,7 +87,7 @@ from .atbased.Autoformer1D    import Autoformer1D
 from .atbased.PatchTST        import PatchTST
 from .atbased.ViT1D           import ViT1D
 from .atbased.TimeNet1D       import TimeNet1D
-from .atbased.PhysFormer      import PhysFormer
+from .atbased.PhysMixFormer1D import PhysMixFormer1D
 
 # ----------------- Registro de modelos -------------------------------
 register_model("dilatedcnn", DilatedCNN)
@@ -129,7 +129,7 @@ register_model("autoformer1d", Autoformer1D)
 register_model("patchtst", PatchTST)
 register_model("vit1d", ViT1D)
 register_model("timenet1d", TimeNet1D)
-register_model("physformer", PhysFormer)
+register_model("physformer", PhysMixFormer1D)
 
 # ----------------- Ejemplo de space (decorador) -----------------------
 @register_space("mlp")
@@ -516,35 +516,41 @@ def _space_timenet1d():
 @register_space("physformer")
 def _space_physformer():
     """
-    Search-space para PhysFormer (atención multiescala + frente
-    multiescala temporal). d_model en pasos de 32 desde 64 garantiza
-    divisibilidad exacta por cualquier num_heads de la lista (2/4/8/16,
-    ya que 32 es múltiplo de 16). num_layers se acota a 1-4: cada capa ya
-    repite la atención en 3 escalas (MSWrapper) más el frente
-    Inception/conv, más cara por capa que transformer1d/informer1d/
-    autoformer1d.
+    Search-space para PhysMixFormer1D (atención multiescala + gauge + Π
+    fila-estocástica + rama física de difusión Chebyshev, portado y
+    validado desde aux/physformer_standalone/physmixformer_standalone_v3.py
+    -- reemplaza al PhysFormer sin física que ocupaba esta variante antes).
 
-    2026-08-05: se probó ampliar TODO el espacio (d_model hasta 320,
-    num_layers hasta 6) + subir num_samples 15→20, y empeoró el resultado
-    en los 4 datasets (ej. bordeaux PCC 0.911→0.812, auckland 0.922→0.877).
-    Con solo 20 trials, un espacio ~2x más grande no alcanza a explorarse
-    bien — BOHB/Hyperband poda agresivamente en las primeras épocas, lo que
-    penaliza configs más grandes/lentas en converger que aún no muestran su
-    verdadero desempeño temprano. Se revirtió d_model/num_layers al rango
-    original; `num_heads=16` se deja (agregado sin costo real: es solo una
-    opción categórica más, no un eje continuo que diluya el presupuesto).
-    Lo único que sí se deja ampliado es `lr` (ver run_bohb.py::_LR_CHOICES):
-    BOHB eligió el valor más alto disponible en 6/6 corridas registradas
-    antes de este cambio — señal inequívoca de tope, a diferencia de
-    d_model/num_layers donde no había evidencia de estar topados.
+    d_model/num_heads/num_layers/dropout: mismos rangos que el PhysFormer
+    original (2026-08-05: ampliar d_model/num_layers empeoró el resultado
+    en los 4 datasets con el mismo presupuesto de trials -- ver historial
+    de esta función). pe_type/ms_type se dejan FIJOS en el código
+    ("rope"/"inception", lo validado en el standalone) en vez de ser HPO
+    -- no formaban parte de la matriz de ablación validada.
+
+    ablation/fuse_physics NO son HPO (2026-08-11): con 15 trials y auckland
+    teniendo solo 18 muestras totales (10/4/4 tras el split), BOHB no tiene
+    señal suficiente para elegir de forma confiable si la física ayuda --
+    en la práctica terminó escogiendo ablation=transformer/fuse_physics=False
+    en auckland, es decir SIN física, contradiciendo la comparación contra
+    el standalone (que siempre corre con physmixformer + física). Se fijan
+    ambos en el código (PhysMixFormer1D.__init__ default: ablation=
+    "physmixformer", fuse_physics=True) igual que el standalone, para que
+    la física de verdad se use cuando la geometría está disponible. La
+    física en sí (Π/L_e/gauge) se sigue auto-desactivando por dataset según
+    disponibilidad de geometría de malla confiable -- ver
+    data/geometry.py::load_geometry -- eso no cambia.
+
+    n_cheb_bases/physics_warmup_epochs sí quedan como HPO: controlan la
+    rama física (nº de bases de Chebyshev, épocas de warm-up del gate).
     """
     return {
-        "d_model":          ("int",    64, 256, 32),
-        "num_heads":        ("choice", [2, 4, 8, 16]),
-        "num_layers":       ("choice", [1, 2, 3, 4]),
-        "dropout":          ("float",  0.0, 0.4, 0.1),
-        "pe_type":          ("choice", ["sin", "rope", "alibi"]),
-        "ms_type":          ("choice", ["vanilla", "inception"]),
+        "d_model":               ("int",    64, 256, 32),
+        "num_heads":              ("choice", [2, 4, 8, 16]),
+        "num_layers":             ("choice", [1, 2, 3, 4]),
+        "dropout":                ("float",  0.0, 0.4, 0.1),
+        "n_cheb_bases":           ("choice", [3, 5, 7]),
+        "physics_warmup_epochs":  ("choice", [1, 4, 8, 12]),
     }
 
 @register_space("bertbigru")
