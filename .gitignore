@@ -20,7 +20,7 @@ src/data/kitpvc/
 src/loss_curves/
 reports/figures/
 reports/results/
-reports/tables/
+reports/tables/*
 models/checkpoints/
 models/exported/
 aux/backup_pre_rerun/
@@ -31,6 +31,7 @@ aux/backup_pre_rerun/
 !models/README.md
 !reports/**/README.md
 !reports/**/.gitkeep
+!reports/tables/ranking_auckland_bordeaux.md
 !experiments/experiment_registry.csv
 !docs/**/*.png
 !docs/**/*.csv
