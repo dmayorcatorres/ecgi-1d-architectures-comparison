@@ -28,7 +28,7 @@ jobs:
           pip install -r requirements.txt
           pip install -r requirements-dev.txt
       - run: pytest tests/unit tests/data tests/model tests/integration -q --cov=src --cov-report=xml
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: coverage-report
           path: coverage.xml
