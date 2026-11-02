@@ -18,7 +18,7 @@ jobs:
     # sin GPU, sin datasets reales. Se ejecutan en cada push/PR.
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-python@v5
         with:
           python-version: "3.10"
@@ -40,7 +40,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: fast-tests
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-python@v5
         with:
           python-version: "3.10"
