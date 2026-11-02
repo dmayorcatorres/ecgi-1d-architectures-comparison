@@ -5,7 +5,7 @@
 # TODO: evaluar y documentar una migración a una versión soportada más
 # reciente de la imagen NGC de PyTorch (22.05 ya no recibe actualizaciones
 # de seguridad).
-FROM nvcr.io/nvidia/pytorch:22.05-py3
+FROM nvcr.io/nvidia/pytorch:26.10-py3
 
 # Metadatos de la imagen (no reemplazan LICENSE ni CITATION.cff).
 LABEL org.opencontainers.image.title="ecgi-1d-architectures-comparison" \
